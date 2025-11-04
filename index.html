@@ -135,6 +135,7 @@
 (() => {
   // ===== State =====
   let running=false, round=0, audioUnlocked=false;
+  let wakeLock=null, wakeLockEnabled=true; // keep screen on while running
 
   // ===== Music helpers =====
   const A4=440, A4_MIDI=69;
@@ -149,12 +150,7 @@
   const DIA = {0:"DO",2:"RE",4:"MI",5:"FA",7:"SOL",9:"LA",11:"TI"};
   const SHP = {1:"DI",3:"RI",6:"FI",8:"SI",10:"LI"};
   const FLT = {1:"RA",3:"ME",6:"SE",8:"LE",10:"TE"};
-  function syllableForPC(pc, dir){ // dir: 'up' | 'down' | null
-    if (DIA[pc]) return DIA[pc];
-    if (dir === 'down') return FLT[pc];
-    if (dir === 'up')   return SHP[pc];
-    return SHP[pc]; // default for target popup (if ever used)
-  }
+  function syllableForPC(pc, dir){ if(DIA[pc]) return DIA[pc]; return dir==='down'?FLT[pc]:SHP[pc]; }
 
   // ===== Audio =====
   const audio={ctx:null, master:null,
@@ -162,20 +158,25 @@
     t(){ return this.ctx?this.ctx.currentTime:0; }
   };
 
-  // Unlock overlay
-  function unlockAudioOnce(){
-    if(audioUnlocked) return;
-    audio.init();
-    const ctx=audio.ctx;
-    const b=ctx.createBuffer(1,1,22050);
-    const src=ctx.createBufferSource(); src.buffer=b; src.connect(audio.master);
-    try{ src.start(0); }catch(e){}
-    ctx.resume().catch(()=>{});
-    audioUnlocked=true;
-    const btn=document.getElementById('unlockAudio'); if(btn) btn.style.display='none';
+  // ===== Wake Lock =====
+  async function requestWakeLock(){
+    try{
+      if('wakeLock' in navigator){
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', ()=>console.log('Wake Lock released'));
+        console.log('Wake Lock active');
+      }
+    }catch(err){ console.warn('Wake Lock error', err); }
   }
-  ['touchend','mousedown','keydown'].forEach(ev=>window.addEventListener(ev,unlockAudioOnce,{once:true,passive:true}));
-  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && audio.ctx && audio.ctx.state!=='running'){ audio.ctx.resume().catch(()=>{}); } });
+  function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible'){
+      if(wakeLockEnabled) requestWakeLock();
+      if(audio.ctx && audio.ctx.state!=='running'){ audio.ctx.resume().catch(()=>{}); }
+    }else{
+      releaseWakeLock();
+    }
+  });
 
   // ===== UI refs =====
   const pcRow=document.getElementById('pcRow');
@@ -203,8 +204,7 @@
     pcChecks.push(cb); wrap.appendChild(cb); wrap.appendChild(document.createTextNode(' '+noteNames[pc]));
     pcRow.appendChild(wrap);
   }
-  // default: C major diatonic only
-  pcChecks.forEach(cb => cb.checked = diatonicPCs.has(+cb.value));
+  pcChecks.forEach(cb => cb.checked = diatonicPCs.has(+cb.value)); // C major defaults
 
   // ===== Range options =====
   const LOW=36,HIGH=96;
@@ -219,26 +219,21 @@
   const pcToKeyEl=new Map();
 
   function sizeKeyboard(){
-    const maxPx=Math.min(window.innerWidth-32, 560); // content padding
+    const maxPx=Math.min(window.innerWidth-32, 560);
     const perWhite=Math.max(28, Math.floor(maxPx/7));
-    WHITE_W=perWhite;
-    WHITE_H=Math.round(WHITE_W*4.4);
-    BLACK_W=Math.round(WHITE_W*0.66);
-    BLACK_H=Math.round(WHITE_H*0.68);
+    WHITE_W=perWhite; WHITE_H=Math.round(WHITE_W*4.4);
+    BLACK_W=Math.round(WHITE_W*0.66); BLACK_H=Math.round(WHITE_H*0.68);
     kbdEl.style.height=(WHITE_H+20)+'px';
     kbdEl.style.width=(WHITE_W*7 + 2)+'px';
   }
-
   function enharmonicFlatName(pc){ const map={1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc]||''; }
 
   function drawSingleOctave(){
     kbdEl.innerHTML=''; pcToKeyEl.clear();
-
     // Whites
     whitePC.forEach((pc,i)=>{
       const x=i*WHITE_W;
-      const w=document.createElement('div');
-      w.className='white';
+      const w=document.createElement('div'); w.className='white';
       Object.assign(w.style,{width:WHITE_W+'px',height:WHITE_H+'px',left:x+'px',top:'0px'});
       const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[pc];
       const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA[pc];
@@ -246,14 +241,12 @@
       w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag);
       kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
     });
-
     // Blacks
     whitePC.forEach((pc,i)=>{
       if(!(pc in blackAfter)) return;
       const bpc=blackAfter[pc];
       const left=i*WHITE_W + (WHITE_W - BLACK_W/2);
-      const b=document.createElement('div');
-      b.className='black';
+      const b=document.createElement('div'); b.className='black';
       Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
       const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enharmonicFlatName(bpc);
       const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent='';
@@ -262,13 +255,6 @@
       kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
     });
   }
-
-  function lightPC(pc,start,dur){
-    const el=pcToKeyEl.get(pc); if(!el) return;
-    const msUntil=Math.max(0,(start-audio.t())*1000), msDur=dur*1000;
-    setTimeout(()=>{el.classList.add('lit'); setTimeout(()=>el.classList.remove('lit'),msDur);},msUntil);
-  }
-
   window.addEventListener('resize',()=>{ sizeKeyboard(); drawSingleOctave(); },{passive:true});
   sizeKeyboard(); drawSingleOctave();
 
@@ -288,7 +274,7 @@
     g.gain.setValueAtTime(0.0001,start);
     g.gain.linearRampToValueAtTime(peak,start+A);
     g.gain.linearRampToValueAtTime(sustain,start+A+D);
-    g.gain.setValueAtTime(sustain,start+Math.max(0,dur-R));
+    g.gain.setValueAtTime(sustain, start+Math.max(0,dur-R));
     g.gain.linearRampToValueAtTime(0.0001,start+dur);
     osc.connect(g); g.connect(audio.master);
     osc.start(start); osc.stop(start+dur+0.05);
@@ -296,9 +282,13 @@
     if(popupDir!==undefined && popupDir!==null){ showSyllableAt(start,dur,syllableForPC(midi%12,popupDir)); }
   }
   function scheduleChord(midis,start,dur,vel=0.95){
-    midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); // no popup for the chord
+    midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); // no popup for chord target
   }
-
+  function lightPC(pc,start,dur){
+    const el=pcToKeyEl.get(pc); if(!el) return;
+    const msUntil=Math.max(0,(start-audio.t())*1000), msDur=dur*1000;
+    setTimeout(()=>{el.classList.add('lit'); setTimeout(()=>el.classList.remove('lit'),msDur);},msUntil);
+  }
   function sleepSec(s){ return new Promise(r=>setTimeout(r,s*1000)); }
   function quarterSec(){ return 60/Math.max(30,+bpmEl.value); }
   function revealStepSec(){ return 60/Math.max(30,+revealBpm.value); }
@@ -317,10 +307,9 @@
     const pool=[]; for(let m=l;m<=h;m++){ if(allowed.has(m%12)) pool.push(m); }
     return pool;
   }
-
   function pickRandomTargets(k){
     const pool=pickPool(); if(!pool.length) return [];
-    const chosen=[]; // sample without replacement
+    const chosen=[];
     while(chosen.length<k && pool.length){
       const idx=Math.floor(Math.random()*pool.length);
       chosen.push(pool[idx]);
@@ -348,7 +337,6 @@
       return {seq, dir:'down'};
     }
   }
-
   async function revealOne(midi){
     const step=revealStepSec(), dur=Math.max(0.05, step*0.8);
     const {seq, dir}=buildReveal_Fsplit(midi);
@@ -357,7 +345,6 @@
       await sleepSec(step);
     }
   }
-
   async function revealAllSequential(midis){
     for(const m of midis.slice().sort((a,b)=>a-b)){
       await revealOne(m);
@@ -365,11 +352,25 @@
     }
   }
 
-  // ===== Run loop =====
+  // ===== Audio unlock + Start/Stop =====
+  function unlockAudioOnce(){
+    if(audioUnlocked) return;
+    audio.init();
+    const ctx=audio.ctx;
+    const b=ctx.createBuffer(1,1,22050);
+    const src=ctx.createBufferSource(); src.buffer=b; src.connect(audio.master);
+    try{ src.start(0); }catch(e){}
+    ctx.resume().catch(()=>{});
+    audioUnlocked=true;
+    const btn=document.getElementById('unlockAudio'); if(btn) btn.style.display='none';
+  }
+  ['touchend','mousedown','keydown'].forEach(ev=>window.addEventListener(ev,unlockAudioOnce,{once:true,passive:true}));
+
   async function start(){
     audio.init();
     if(audio.ctx.state==='suspended'){ try{ await audio.ctx.resume(); }catch(e){} }
     running=true; startBtn.classList.add('running'); statusEl.textContent='Running…';
+    if(wakeLockEnabled) requestWakeLock();
     round=0;
 
     while(running){
@@ -388,11 +389,12 @@
       await sleepSec(parseFloat(between.value));
     }
   }
-  function stop(){ running=false; startBtn.classList.remove('running'); statusEl.textContent='Stopped.'; }
+  function stop(){ running=false; startBtn.classList.remove('running'); statusEl.textContent='Stopped.'; releaseWakeLock(); }
 
-  // Buttons
+  // Single (correct) registration – no duplicate consts here.
   startBtn.addEventListener('click',()=>{ if(!running) start(); });
   stopBtn.addEventListener('click',stop);
+
 })();
 </script>
 </body>
