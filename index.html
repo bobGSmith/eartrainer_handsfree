@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Hands-Free Solfège Ear Trainer (Kodály)</title>
+<style>
+  :root{--bg:#0e0f12;--panel:#171a20;--text:#eaeef5;--muted:#9aa4b2}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{padding:16px 20px;border-bottom:1px solid #1f222b;background:linear-gradient(180deg,#12141a,#0e0f12 60%)}
+  h1{margin:0 0 4px;font-size:18px}.sub{margin:0;color:var(--muted);font-size:13px}
+  .wrap{max-width:1000px;margin:0 auto;padding:16px;display:grid;gap:16px}
+  .panel{background:var(--panel);border:1px solid #252935;border-radius:12px;padding:12px}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  fieldset{border:1px solid #2a3040;border-radius:10px;padding:10px 12px}
+  legend{color:var(--muted);font-size:12px;padding:0 6px}
+  label{font-size:13px}
+  select,input[type=number]{background:#0f1116;color:#eaeef5;border:1px solid #2a3040;border-radius:8px;padding:6px 8px}
+  button{background:#1b2430;color:#eaeef5;border:1px solid #2a3040;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
+  button.running{background:#1f3b2a;border-color:#2d614a;color:#c8ffd7}
+  .hint{color:var(--muted);font-size:12px}
+
+  /* Single-octave keyboard (C..B) */
+  .kbd-wrap{display:flex;justify-content:center}
+  .keyboard{position:relative;height:178px;}
+  .white,.black{position:absolute;border:1px solid #333;border-bottom-left-radius:4px;border-bottom-right-radius:4px}
+  .white{background:#fff;height:158px}
+  .black{background:#111;height:108px;border-color:#222;z-index:2}
+  .white.lit{box-shadow:inset 0 0 0 2px #0077ff,0 0 12px #0077ff;background:#f2fbff}
+  .black.lit{box-shadow:inset 0 0 0 2px #66ccff,0 0 12px #66ccff;background:#1f3b4d}
+
+  .note-tag{position:absolute;bottom:42px;left:0;right:0;text-align:center;font-size:11px;color:#333;pointer-events:none}
+  .solf-tag{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-size:12px;font-weight:700;color:#26323f;pointer-events:none}
+  .variant-tag{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:10px;color:#5e6a77;pointer-events:none}
+  .black .note-tag{color:#ccd;bottom:36px;font-weight:600}
+  .black .solf-tag{color:#e2eef9;bottom:18px}
+  .black .variant-tag{color:#c7d6e6}
+  .white.lit .note-tag{color:#014}.black.lit .note-tag{color:#e8f7ff}
+  .white.lit .solf-tag{color:#013}.black.lit .solf-tag{color:#e8f7ff}
+  .white.lit .variant-tag{color:#012}.black.lit .variant-tag{color:#e8f7ff}
+
+  /* Big reveal syllable overlay */
+  .syllable-pop{
+    position:fixed; left:50%; top:14%; transform:translateX(-50%);
+    font-size:48px; font-weight:800; letter-spacing:1px;
+    color:#eaf6ff; text-shadow:0 2px 14px rgba(0,0,0,0.55);
+    pointer-events:none; opacity:0; transition:opacity .06s ease;
+    background:rgba(20,28,40,0.55); padding:.25rem .75rem; border-radius:12px; border:1px solid #2a3b50;
+    z-index:9999;
+  }
+  .syllable-pop.show{ opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hands-Free Solfège Ear Trainer</h1>
+  <p class="sub">C-major cadence • random targets (1–4) • same-octave reveal (F♯↑ / F↓) • Kodály syllables (black keys show sharp/flat)</p>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="row">
+      <fieldset>
+        <legend>Pitch-classes (targets)</legend>
+        <div class="row" id="pcRow"></div>
+        <div class="hint">Tick which of the 12 notes may be chosen as targets.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Range for targets</legend>
+        <div class="row">
+          <label>Lowest</label><select id="lowSel"></select>
+          <label>Highest</label><select id="highSel"></select>
+        </div>
+        <div class="hint">Only the target(s) are range-filtered; reveal stays in each target’s octave.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Flow</legend>
+        <div class="row">
+          <label>Cadence every</label><input id="cadEvery" type="number" min="1" value="1" style="width:72px"> rounds
+          <label>BPM (cadence)</label><input id="bpm" type="number" min="30" max="200" value="88" style="width:80px">
+          <label>Targets at once</label>
+          <select id="stackCount">
+            <option>1</option><option>2</option><option>3</option><option>4</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Pre-note silence</label><input id="preSil" type="number" min="0" step="0.1" value="0.5" style="width:80px"> s
+          <label>Note→reveal wait</label><input id="revealWait" type="number" min="0" step="0.1" value="1.0" style="width:80px"> s
+          <label>Between rounds</label><input id="between" type="number" min="0" step="0.1" value="1.0" style="width:80px"> s
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Timing</legend>
+        <div class="row">
+          <label>Note duration (target)</label><input id="noteLen" type="number" min="0.05" step="0.05" value="0.8" style="width:90px"> s
+          <label>Reveal tempo</label><input id="revealBpm" type="number" min="30" max="360" value="80" style="width:90px"> BPM
+        </div>
+        <div class="hint">Reveal notes auto-shortened (~80% of step) so they never overlap.</div>
+      </fieldset>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn">Stop</button>
+      <span id="status" class="hint">Stopped.</span>
+    </div>
+  </div>
+
+  <div class="panel kbd-wrap">
+    <div id="keyboard" class="keyboard" aria-label="Single-octave keyboard"></div>
+  </div>
+</div>
+
+<div id="syllPop" class="syllable-pop"></div>
+
+<script>
+(() => {
+  // ===== State =====
+  let running=false, round=0;
+
+  // ===== Music helpers =====
+  const A4=440, A4_MIDI=69;
+  const noteNames=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+  const diatonicPCs=new Set([0,2,4,5,7,9,11]);
+  const midiToFreq=m=>A4*Math.pow(2,(m-A4_MIDI)/12);
+  const midiToName=m=>`${noteNames[m%12]}${Math.floor(m/12)-1}`;
+  const nearestLocalCDown=m=>Math.floor(m/12)*12;
+  const isAccidental=m=>!diatonicPCs.has(m%12);
+
+  // Kodály syllables
+  const DIA = {0:"DO",2:"RE",4:"MI",5:"FA",7:"SOL",9:"LA",11:"TI"};
+  const SHP = {1:"DI",3:"RI",6:"FI",8:"SI",10:"LI"};
+  const FLT = {1:"RA",3:"ME",6:"SE",8:"LE",10:"TE"};
+  function syllableForPC(pc, dir){ // dir: 'up' | 'down' | null
+    if (DIA[pc]) return DIA[pc];
+    if (dir === 'down') return FLT[pc];
+    if (dir === 'up')   return SHP[pc];
+    return SHP[pc]; // default for target popup
+  }
+
+  // ===== Audio =====
+  const audio={ctx:null, master:null,
+    init(){ if(!this.ctx){ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); this.master=this.ctx.createGain(); this.master.gain.value=0.28; this.master.connect(this.ctx.destination);} },
+    t(){ return this.ctx?this.ctx.currentTime:0; }
+  };
+
+  // ===== UI refs =====
+  const pcRow=document.getElementById('pcRow');
+  const lowSel=document.getElementById('lowSel');
+  const highSel=document.getElementById('highSel');
+  const cadEvery=document.getElementById('cadEvery');
+  const bpmEl=document.getElementById('bpm');
+  const preSil=document.getElementById('preSil');
+  const revealWait=document.getElementById('revealWait');
+  const between=document.getElementById('between');
+  const noteLen=document.getElementById('noteLen');
+  const revealBpm=document.getElementById('revealBpm');
+  const stackCountEl=document.getElementById('stackCount');
+  const startBtn=document.getElementById('startBtn');
+  const stopBtn=document.getElementById('stopBtn');
+  const statusEl=document.getElementById('status');
+  const kbdEl=document.getElementById('keyboard');
+
+  // ===== Pitch-class toggles =====
+  const pcChecks=[];
+  for(let pc=0;pc<12;pc++){
+    const wrap=document.createElement('label');
+    const cb=document.createElement('input');
+    cb.type='checkbox'; cb.value=pc; cb.checked=true;
+    pcChecks.push(cb); wrap.appendChild(cb); wrap.appendChild(document.createTextNode(' '+noteNames[pc]));
+    pcRow.appendChild(wrap);
+  }
+  // default: C major diatonic only
+  pcChecks.forEach(cb => cb.checked = diatonicPCs.has(+cb.value));
+
+  // ===== Range options =====
+  const LOW=36,HIGH=96;
+  function addOpts(sel,from,to,def){ for(let m=from;m<=to;m++){const o=document.createElement('option');o.value=m;o.textContent=midiToName(m);sel.appendChild(o);} sel.value=def; }
+  addOpts(lowSel,LOW,HIGH,48); addOpts(highSel,LOW,HIGH,84);
+  [lowSel,highSel].forEach(el=>el.addEventListener('change',()=>{ if(+lowSel.value>+highSel.value) highSel.value=lowSel.value; if(+highSel.value<+lowSel.value) lowSel.value=highSel.value; }));
+
+  // ===== Keyboard (single octave) =====
+  const WHITE_W = 36, WHITE_H = 158, BLACK_W = 24, BLACK_H = 108;
+  const whitePC = [0,2,4,5,7,9,11];
+  const blackAfter = {0:1,2:3,5:6,7:8,9:10};
+  const pcToKeyEl=new Map();
+
+  function enharmonicFlatName(pc){ const map = {1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc] || ''; }
+
+  function drawSingleOctave(){
+    kbdEl.innerHTML=''; kbdEl.style.width = (WHITE_W*7 + 2) + 'px'; pcToKeyEl.clear();
+    // whites
+    whitePC.forEach((pc, i)=>{
+      const x=i*WHITE_W, w=document.createElement('div'); w.className='white';
+      Object.assign(w.style,{width:WHITE_W+'px',height:WHITE_H+'px',left:x+'px',top:'0px'});
+      const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[pc];
+      const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA[pc];
+      const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent='';
+      w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag); kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
+    });
+    // blacks
+    whitePC.forEach((pc,i)=>{
+      if(!(pc in blackAfter)) return;
+      const bpc=blackAfter[pc], left=i*WHITE_W + (WHITE_W - BLACK_W/2);
+      const b=document.createElement('div'); b.className='black';
+      Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
+      const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enharmonicFlatName(bpc);
+      const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent='';
+      const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent=`${SHP[bpc]} / ${FLT[bpc]}`;
+      b.appendChild(tag); b.appendChild(solf); b.appendChild(varTag); kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
+    });
+  }
+  function lightPC(pc,start,dur){
+    const el=pcToKeyEl.get(pc); if(!el) return;
+    const msUntil=Math.max(0,(start-audio.t())*1000), msDur=dur*1000;
+    setTimeout(()=>{el.classList.add('lit'); setTimeout(()=>el.classList.remove('lit'),msDur);},msUntil);
+  }
+  drawSingleOctave();
+
+  // ===== Popup syllables =====
+  const syllPop=document.getElementById('syllPop');
+  function showSyllableAt(time,dur,text){
+    const msUntil=Math.max(0,(time-audio.t())*1000), msDur=Math.max(150,dur*1000);
+    setTimeout(()=>{syllPop.textContent=text; syllPop.classList.add('show'); setTimeout(()=>syllPop.classList.remove('show'),msDur);},msUntil);
+  }
+
+  // ===== Scheduling =====
+  function scheduleTone(midi,start,dur,vel=0.95,popupDir=null){
+    const ctx=audio.ctx, osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.type='sine'; osc.frequency.value=midiToFreq(midi);
+    const A=0.01,D=0.06,S=0.75,R=Math.min(0.12,Math.max(0.06,dur*0.33));
+    const peak=vel, sustain=vel*S;
+    g.gain.setValueAtTime(0.0001,start);
+    g.gain.linearRampToValueAtTime(peak,start+A);
+    g.gain.linearRampToValueAtTime(sustain,start+A+D);
+    g.gain.setValueAtTime(sustain,start+Math.max(0,dur-R));
+    g.gain.linearRampToValueAtTime(0.0001,start+dur);
+    osc.connect(g); g.connect(audio.master);
+    osc.start(start); osc.stop(start+dur+0.05);
+    lightPC(midi%12,start,dur);
+    if(popupDir!==undefined && popupDir!==null){ showSyllableAt(start,dur,syllableForPC(midi%12,popupDir)); }
+  }
+  function scheduleChord(midis,start,dur,vel=0.95){
+    midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); // no popup for chord target
+  }
+
+  function sleepSec(s){ return new Promise(r=>setTimeout(r,s*1000)); }
+  function quarterSec(){ return 60/Math.max(30,+bpmEl.value); }
+  function revealStepSec(){ return 60/Math.max(30,+revealBpm.value); }
+
+  // ===== Cadence / target(s) / reveal =====
+  async function playCadence(){
+    const q=quarterSec(), dur=q*0.9, g=0.9, t=audio.t()+0.02;
+    const I=[60,64,67], IV=[65,69,72], V=[67,71,74];
+    scheduleChord(I,t,dur,g); scheduleChord(IV,t+q,dur,g); scheduleChord(V,t+2*q,dur,g); scheduleChord(I,t+3*q,dur*1.15,g);
+    await sleepSec(4*q+0.05);
+  }
+
+  function pickPool(){
+    const l=+lowSel.value, h=+highSel.value;
+    const allowed=new Set(pcChecks.filter(cb=>cb.checked).map(cb=>+cb.value));
+    const pool=[]; for(let m=l;m<=h;m++){ if(allowed.has(m%12)) pool.push(m); }
+    return pool;
+  }
+
+  function pickRandomTargets(k){
+    const pool=pickPool(); if(!pool.length) return [];
+    // ensure unique MIDI values; sample without replacement up to k
+    const chosen=[];
+    while(chosen.length<k && pool.length){
+      const idx=Math.floor(Math.random()*pool.length);
+      chosen.push(pool[idx]);
+      pool.splice(idx,1);
+    }
+    return chosen.sort((a,b)=>a-b); // sort ascending for reveal order
+  }
+
+  async function playTargets(midis){
+    const len=parseFloat(noteLen.value);
+    scheduleChord(midis, audio.t()+0.02, len, 1.0);
+    await sleepSec(len*0.9);
+  }
+
+  function buildReveal_Fsplit(midi){
+    const localC=nearestLocalCDown(midi), topC=localC+12, pc=midi%12, goUp=(pc>=6);
+    const seq=[midi];
+    if(goUp){
+      let cur=midi; if(isAccidental(cur) && cur+1<=topC){ cur+=1; seq.push(cur); }
+      const asc=[7,9,11,12].map(s=>localC+s); for(const n of asc){ if(n>cur && n<=topC) seq.push(n); }
+      return {seq, dir:'up'};
+    }else{
+      let cur=midi; if(isAccidental(cur) && cur-1>=localC){ cur-=1; seq.push(cur); }
+      const desc=[5,4,2,0].map(s=>localC+s); for(const n of desc){ if(n<cur && n>=localC) seq.push(n); }
+      return {seq, dir:'down'};
+    }
+  }
+
+  async function revealOne(midi){
+    const step=revealStepSec(), dur=Math.max(0.05, step*0.8);
+    const {seq, dir}=buildReveal_Fsplit(midi);
+    for(const m of seq){
+      scheduleTone(m, audio.t()+0.02, dur, 0.95, dir);
+      await sleepSec(step);
+    }
+  }
+
+  async function revealAllSequential(midis){
+    // reveal each target one-by-one, starting from lowest pitch
+    for(const m of midis.slice().sort((a,b)=>a-b)){
+      await revealOne(m);
+      // tiny pause between different notes’ reveals to breathe
+      await sleepSec(0.1);
+    }
+  }
+
+  // ===== Run loop =====
+  async function start(){
+    audio.init();
+    if(audio.ctx.state==='suspended') await audio.ctx.resume();
+    running=true; startBtn.classList.add('running'); statusEl.textContent='Running…';
+    round=0;
+
+    while(running){
+      round++;
+      const n=Math.max(1,+cadEvery.value);
+      if(((round-1) % n)===0){ await playCadence(); }
+
+      await sleepSec(parseFloat(preSil.value));
+      const k=Math.min(4, Math.max(1, parseInt(stackCountEl.value,10) || 1));
+      const targets=pickRandomTargets(k);
+      if(!targets.length){ statusEl.textContent='No valid notes in range/selection.'; stop(); return; }
+
+      await playTargets(targets);
+      await sleepSec(parseFloat(revealWait.value));
+      await revealAllSequential(targets);
+      await sleepSec(parseFloat(between.value));
+    }
+  }
+  function stop(){ running=false; startBtn.classList.remove('running'); statusEl.textContent='Stopped.'; }
+
+  // Buttons + iOS resume
+  startBtn.addEventListener('click',()=>{ if(!running) start(); });
+  stopBtn.addEventListener('click',stop);
+  window.addEventListener('pointerdown',()=>{ if(!audio.ctx) return; if(audio.ctx.state==='suspended') audio.ctx.resume(); },{once:true});
+})();
+</script>
+</body>
+</html>
