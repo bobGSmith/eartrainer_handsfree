@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
 <title>Hands-Free Solfège Ear Trainer (Kodály)</title>
 <style>
   :root{--bg:#0e0f12;--panel:#171a20;--text:#eaeef5;--muted:#9aa4b2}
@@ -21,21 +21,20 @@
   button.running{background:#1f3b2a;border-color:#2d614a;color:#c8ffd7}
   .hint{color:var(--muted);font-size:12px}
 
-  /* Single-octave keyboard (C..B) */
+  /* Keyboard */
   .kbd-wrap{display:flex;justify-content:center}
-  .keyboard{position:relative;height:178px;}
+  .keyboard{position:relative;height:178px}
   .white,.black{position:absolute;border:1px solid #333;border-bottom-left-radius:4px;border-bottom-right-radius:4px}
-  .white{background:#fff;height:158px}
-  .black{background:#111;height:108px;border-color:#222;z-index:2}
+  .white{background:#fff}
+  .black{background:#111;border-color:#222;z-index:2}
   .white.lit{box-shadow:inset 0 0 0 2px #0077ff,0 0 12px #0077ff;background:#f2fbff}
   .black.lit{box-shadow:inset 0 0 0 2px #66ccff,0 0 12px #66ccff;background:#1f3b4d}
-
-  .note-tag{position:absolute;bottom:42px;left:0;right:0;text-align:center;font-size:11px;color:#333;pointer-events:none}
-  .solf-tag{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-size:12px;font-weight:700;color:#26323f;pointer-events:none}
-  .variant-tag{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:10px;color:#5e6a77;pointer-events:none}
-  .black .note-tag{color:#ccd;bottom:36px;font-weight:600}
-  .black .solf-tag{color:#e2eef9;bottom:18px}
-  .black .variant-tag{color:#c7d6e6}
+  .note-tag{position:absolute;left:0;right:0;text-align:center;font-size:11px;color:#333;pointer-events:none}
+  .solf-tag{position:absolute;left:0;right:0;text-align:center;font-size:12px;font-weight:700;color:#26323f;pointer-events:none}
+  .variant-tag{position:absolute;left:0;right:0;text-align:center;font-size:10px;color:#5e6a77;pointer-events:none}
+  .white .note-tag{bottom:42px}.white .solf-tag{bottom:22px}.white .variant-tag{bottom:6px}
+  .black .note-tag{bottom:36px;color:#ccd;font-weight:600}.black .solf-tag{bottom:18px;color:#e2eef9}
+  .black .variant-tag{bottom:6px;color:#c7d6e6}
   .white.lit .note-tag{color:#014}.black.lit .note-tag{color:#e8f7ff}
   .white.lit .solf-tag{color:#013}.black.lit .solf-tag{color:#e8f7ff}
   .white.lit .variant-tag{color:#012}.black.lit .variant-tag{color:#e8f7ff}
@@ -50,6 +49,18 @@
     z-index:9999;
   }
   .syllable-pop.show{ opacity:1; }
+
+  /* Audio unlock overlay */
+  #unlockAudio{
+    position:fixed; inset:0; z-index:99999; background:#0e0f12; display:flex;
+    align-items:center; justify-content:center; border:0; color:#eaeef5;
+    font-size:20px; font-weight:700; letter-spacing:.3px
+  }
+
+  @media (max-width:520px){
+    button, select, input[type=number]{ padding:12px 14px; font-size:16px }
+    .panel{ padding:10px }
+  }
 </style>
 </head>
 <body>
@@ -57,6 +68,9 @@
   <h1>Hands-Free Solfège Ear Trainer</h1>
   <p class="sub">C-major cadence • random targets (1–4) • same-octave reveal (F♯↑ / F↓) • Kodály syllables (black keys show sharp/flat)</p>
 </header>
+
+<!-- Audio unlock (iOS Safari safe) -->
+<button id="unlockAudio">Tap to enable sound</button>
 
 <div class="wrap">
   <div class="panel">
@@ -82,9 +96,7 @@
           <label>Cadence every</label><input id="cadEvery" type="number" min="1" value="1" style="width:72px"> rounds
           <label>BPM (cadence)</label><input id="bpm" type="number" min="30" max="200" value="88" style="width:80px">
           <label>Targets at once</label>
-          <select id="stackCount">
-            <option>1</option><option>2</option><option>3</option><option>4</option>
-          </select>
+          <select id="stackCount"><option>1</option><option>2</option><option>3</option><option>4</option></select>
         </div>
         <div class="row">
           <label>Pre-note silence</label><input id="preSil" type="number" min="0" step="0.1" value="0.5" style="width:80px"> s
@@ -122,7 +134,7 @@
 <script>
 (() => {
   // ===== State =====
-  let running=false, round=0;
+  let running=false, round=0, audioUnlocked=false;
 
   // ===== Music helpers =====
   const A4=440, A4_MIDI=69;
@@ -141,7 +153,7 @@
     if (DIA[pc]) return DIA[pc];
     if (dir === 'down') return FLT[pc];
     if (dir === 'up')   return SHP[pc];
-    return SHP[pc]; // default for target popup
+    return SHP[pc]; // default for target popup (if ever used)
   }
 
   // ===== Audio =====
@@ -149,6 +161,21 @@
     init(){ if(!this.ctx){ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); this.master=this.ctx.createGain(); this.master.gain.value=0.28; this.master.connect(this.ctx.destination);} },
     t(){ return this.ctx?this.ctx.currentTime:0; }
   };
+
+  // Unlock overlay
+  function unlockAudioOnce(){
+    if(audioUnlocked) return;
+    audio.init();
+    const ctx=audio.ctx;
+    const b=ctx.createBuffer(1,1,22050);
+    const src=ctx.createBufferSource(); src.buffer=b; src.connect(audio.master);
+    try{ src.start(0); }catch(e){}
+    ctx.resume().catch(()=>{});
+    audioUnlocked=true;
+    const btn=document.getElementById('unlockAudio'); if(btn) btn.style.display='none';
+  }
+  ['touchend','mousedown','keydown'].forEach(ev=>window.addEventListener(ev,unlockAudioOnce,{once:true,passive:true}));
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && audio.ctx && audio.ctx.state!=='running'){ audio.ctx.resume().catch(()=>{}); } });
 
   // ===== UI refs =====
   const pcRow=document.getElementById('pcRow');
@@ -185,43 +212,65 @@
   addOpts(lowSel,LOW,HIGH,48); addOpts(highSel,LOW,HIGH,84);
   [lowSel,highSel].forEach(el=>el.addEventListener('change',()=>{ if(+lowSel.value>+highSel.value) highSel.value=lowSel.value; if(+highSel.value<+lowSel.value) lowSel.value=highSel.value; }));
 
-  // ===== Keyboard (single octave) =====
-  const WHITE_W = 36, WHITE_H = 158, BLACK_W = 24, BLACK_H = 108;
-  const whitePC = [0,2,4,5,7,9,11];
-  const blackAfter = {0:1,2:3,5:6,7:8,9:10};
+  // ===== Responsive keyboard sizing =====
+  let WHITE_W, WHITE_H, BLACK_W, BLACK_H;
+  const whitePC=[0,2,4,5,7,9,11];
+  const blackAfter={0:1,2:3,5:6,7:8,9:10};
   const pcToKeyEl=new Map();
 
-  function enharmonicFlatName(pc){ const map = {1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc] || ''; }
+  function sizeKeyboard(){
+    const maxPx=Math.min(window.innerWidth-32, 560); // content padding
+    const perWhite=Math.max(28, Math.floor(maxPx/7));
+    WHITE_W=perWhite;
+    WHITE_H=Math.round(WHITE_W*4.4);
+    BLACK_W=Math.round(WHITE_W*0.66);
+    BLACK_H=Math.round(WHITE_H*0.68);
+    kbdEl.style.height=(WHITE_H+20)+'px';
+    kbdEl.style.width=(WHITE_W*7 + 2)+'px';
+  }
+
+  function enharmonicFlatName(pc){ const map={1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc]||''; }
 
   function drawSingleOctave(){
-    kbdEl.innerHTML=''; kbdEl.style.width = (WHITE_W*7 + 2) + 'px'; pcToKeyEl.clear();
-    // whites
-    whitePC.forEach((pc, i)=>{
-      const x=i*WHITE_W, w=document.createElement('div'); w.className='white';
+    kbdEl.innerHTML=''; pcToKeyEl.clear();
+
+    // Whites
+    whitePC.forEach((pc,i)=>{
+      const x=i*WHITE_W;
+      const w=document.createElement('div');
+      w.className='white';
       Object.assign(w.style,{width:WHITE_W+'px',height:WHITE_H+'px',left:x+'px',top:'0px'});
       const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[pc];
       const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA[pc];
       const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent='';
-      w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag); kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
+      w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag);
+      kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
     });
-    // blacks
+
+    // Blacks
     whitePC.forEach((pc,i)=>{
       if(!(pc in blackAfter)) return;
-      const bpc=blackAfter[pc], left=i*WHITE_W + (WHITE_W - BLACK_W/2);
-      const b=document.createElement('div'); b.className='black';
+      const bpc=blackAfter[pc];
+      const left=i*WHITE_W + (WHITE_W - BLACK_W/2);
+      const b=document.createElement('div');
+      b.className='black';
       Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
       const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enharmonicFlatName(bpc);
       const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent='';
       const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent=`${SHP[bpc]} / ${FLT[bpc]}`;
-      b.appendChild(tag); b.appendChild(solf); b.appendChild(varTag); kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
+      b.appendChild(tag); b.appendChild(solf); b.appendChild(varTag);
+      kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
     });
   }
+
   function lightPC(pc,start,dur){
     const el=pcToKeyEl.get(pc); if(!el) return;
     const msUntil=Math.max(0,(start-audio.t())*1000), msDur=dur*1000;
     setTimeout(()=>{el.classList.add('lit'); setTimeout(()=>el.classList.remove('lit'),msDur);},msUntil);
   }
-  drawSingleOctave();
+
+  window.addEventListener('resize',()=>{ sizeKeyboard(); drawSingleOctave(); },{passive:true});
+  sizeKeyboard(); drawSingleOctave();
 
   // ===== Popup syllables =====
   const syllPop=document.getElementById('syllPop');
@@ -247,14 +296,14 @@
     if(popupDir!==undefined && popupDir!==null){ showSyllableAt(start,dur,syllableForPC(midi%12,popupDir)); }
   }
   function scheduleChord(midis,start,dur,vel=0.95){
-    midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); // no popup for chord target
+    midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); // no popup for the chord
   }
 
   function sleepSec(s){ return new Promise(r=>setTimeout(r,s*1000)); }
   function quarterSec(){ return 60/Math.max(30,+bpmEl.value); }
   function revealStepSec(){ return 60/Math.max(30,+revealBpm.value); }
 
-  // ===== Cadence / target(s) / reveal =====
+  // ===== Cadence / targets / reveal =====
   async function playCadence(){
     const q=quarterSec(), dur=q*0.9, g=0.9, t=audio.t()+0.02;
     const I=[60,64,67], IV=[65,69,72], V=[67,71,74];
@@ -271,14 +320,13 @@
 
   function pickRandomTargets(k){
     const pool=pickPool(); if(!pool.length) return [];
-    // ensure unique MIDI values; sample without replacement up to k
-    const chosen=[];
+    const chosen=[]; // sample without replacement
     while(chosen.length<k && pool.length){
       const idx=Math.floor(Math.random()*pool.length);
       chosen.push(pool[idx]);
       pool.splice(idx,1);
     }
-    return chosen.sort((a,b)=>a-b); // sort ascending for reveal order
+    return chosen.sort((a,b)=>a-b);
   }
 
   async function playTargets(midis){
@@ -311,10 +359,8 @@
   }
 
   async function revealAllSequential(midis){
-    // reveal each target one-by-one, starting from lowest pitch
     for(const m of midis.slice().sort((a,b)=>a-b)){
       await revealOne(m);
-      // tiny pause between different notes’ reveals to breathe
       await sleepSec(0.1);
     }
   }
@@ -322,7 +368,7 @@
   // ===== Run loop =====
   async function start(){
     audio.init();
-    if(audio.ctx.state==='suspended') await audio.ctx.resume();
+    if(audio.ctx.state==='suspended'){ try{ await audio.ctx.resume(); }catch(e){} }
     running=true; startBtn.classList.add('running'); statusEl.textContent='Running…';
     round=0;
 
@@ -344,10 +390,9 @@
   }
   function stop(){ running=false; startBtn.classList.remove('running'); statusEl.textContent='Stopped.'; }
 
-  // Buttons + iOS resume
+  // Buttons
   startBtn.addEventListener('click',()=>{ if(!running) start(); });
   stopBtn.addEventListener('click',stop);
-  window.addEventListener('pointerdown',()=>{ if(!audio.ctx) return; if(audio.ctx.state==='suspended') audio.ctx.resume(); },{once:true});
 })();
 </script>
 </body>
