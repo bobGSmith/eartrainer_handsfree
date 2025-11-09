@@ -266,21 +266,64 @@
   }
 
   // ===== Scheduling =====
-  function scheduleTone(midi,start,dur,vel=0.95,popupDir=null){
-    const ctx=audio.ctx, osc=ctx.createOscillator(), g=ctx.createGain();
-    osc.type='sine'; osc.frequency.value=midiToFreq(midi);
-    const A=0.01,D=0.06,S=0.75,R=Math.min(0.12,Math.max(0.06,dur*0.33));
+  function scheduleTone(midi, start, dur, vel=0.95, popupDir=null){
+    const ctx = audio.ctx;
+    const f = midiToFreq(midi);
+
+    // --- Build a tiny additive synth: fundamental + gentle 2nd/3rd partials.
+    // Also add an octave-up helper for very low notes to aid pitch clarity.
+    const bus = ctx.createGain();
+    const A=0.01, D=0.06, S=0.75, R=Math.min(0.12, Math.max(0.06, dur*0.33));
     const peak=vel, sustain=vel*S;
-    g.gain.setValueAtTime(0.0001,start);
-    g.gain.linearRampToValueAtTime(peak,start+A);
-    g.gain.linearRampToValueAtTime(sustain,start+A+D);
-    g.gain.setValueAtTime(sustain, start+Math.max(0,dur-R));
-    g.gain.linearRampToValueAtTime(0.0001,start+dur);
-    osc.connect(g); g.connect(audio.master);
-    osc.start(start); osc.stop(start+dur+0.05);
-    lightPC(midi%12,start,dur);
-    if(popupDir!==undefined && popupDir!==null){ showSyllableAt(start,dur,syllableForPC(midi%12,popupDir)); }
+
+    // Shared envelope on the mix bus (pre-master)
+    bus.gain.setValueAtTime(0.0001, start);
+    bus.gain.linearRampToValueAtTime(peak, start + A);
+    bus.gain.linearRampToValueAtTime(sustain, start + A + D);
+    bus.gain.setValueAtTime(sustain, start + Math.max(0, dur - R));
+    bus.gain.linearRampToValueAtTime(0.0001, start + dur);
+
+    // Fundamental (sine to stay clean)
+    const o1 = ctx.createOscillator();
+    o1.type = 'sine'; o1.frequency.value = f;
+    o1.connect(bus);
+
+    // Subtle 2nd and 3rd partials to add pitch cues without sounding buzzy
+    const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o2.type='sine'; o2.frequency.value = f*2; g2.gain.value = 0.18; // ~ -15 dB
+    o2.connect(g2); g2.connect(bus);
+
+    const o3 = ctx.createOscillator(), g3 = ctx.createGain();
+    o3.type='sine'; o3.frequency.value = f*3; g3.gain.value = 0.10; // ~ -20 dB
+    o3.connect(g3); g3.connect(bus);
+
+    // Octave-up reinforcement for bass notes (only if really low)
+    let oUp, gUp;
+    if (f < 130) { // roughly below C3
+      oUp = ctx.createOscillator(); gUp = ctx.createGain();
+      oUp.type='sine'; oUp.frequency.value = f*2; gUp.gain.value = 0.22; // gentle helper
+      oUp.connect(gUp); gUp.connect(bus);
+    }
+
+    // Route to master
+    bus.connect(audio.master);
+
+    // Start/stop
+    [o1,o2,o3].forEach(o => o.start(start));
+    if (oUp) oUp.start(start);
+
+    const stopAt = start + dur + 0.05;
+    [o1,o2,o3].forEach(o => o.stop(stopAt));
+    if (oUp) oUp.stop(stopAt);
+
+    // Visuals + optional popup
+    lightPC(midi%12, start, dur);
+    if (popupDir!==undefined && popupDir!==null) {
+      showSyllableAt(start, dur, syllableForPC(midi%12, popupDir));
+    }
   }
+
+  
   function scheduleChord(midis,start,dur,vel=0.95){
     midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); // no popup for chord target
   }
