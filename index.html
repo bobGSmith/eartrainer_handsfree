@@ -113,6 +113,36 @@
         </div>
         <div class="hint">Reveal notes auto-shortened (~80% of step) so they never overlap.</div>
       </fieldset>
+
+      <fieldset>
+        <legend>Reveal Mode</legend>
+
+        <div class="row">
+          <label>How to reveal</label>
+          <select id="revealMode" style="width:180px">
+            <option value="scale">Play scale (current)</option>
+            <option value="speak">Speak note name</option>
+          </select>
+          <label>
+            <input id="speakRef" type="checkbox" checked>
+            Mix quiet reference tone
+          </label>
+        </div>
+
+        <div class="row">
+          <label>Spoken content</label>
+          <select id="speechContent" style="width:180px">
+            <option value="note">Note names (C, C sharp…)</option>
+            <option value="solfege">Solfège (Do, Di/Ra…)</option>
+          </select>
+          <label>
+            <input id="speakOctave" type="checkbox" checked>
+            Include octave number
+          </label>
+        </div>
+      </fieldset>
+
+
     </div>
   </div>
 
@@ -151,6 +181,125 @@
   const SHP = {1:"DI",3:"RI",6:"FI",8:"SI",10:"LI"};
   const FLT = {1:"RA",3:"ME",6:"SE",8:"LE",10:"TE"};
   function syllableForPC(pc, dir){ if(DIA[pc]) return DIA[pc]; return dir==='down'?FLT[pc]:SHP[pc]; }
+
+  // ===== TTS (Text-to-Speech) helpers =====
+  const tts = {
+    ready: false,
+    voices: [],
+    init(){
+      if (this.ready) return;
+      const load = () => {
+        this.voices = speechSynthesis.getVoices() || [];
+        this.ready = true;
+      };
+      load();
+      // Some browsers populate voices asynchronously
+      window.speechSynthesis.onvoiceschanged = load;
+    },
+    pickVoice(){
+      // Prefer an English voice if available; fall back to default
+      const v = this.voices.find(v=>/en(-|_|$)/i.test(v.lang)) || this.voices[0];
+      return v || null;
+    }
+  };
+
+  // Speakable names: prefer sharps when revealing 'up', flats when 'down'
+  const SHARP_TEXT = {1:'C sharp',3:'D sharp',6:'F sharp',8:'G sharp',10:'A sharp'};
+  const FLAT_TEXT  = {1:'D flat', 3:'E flat', 6:'G flat', 8:'A flat', 10:'B flat'};
+  function pcSpeakable(pc, dir){
+    const base = {0:'C',2:'D',4:'E',5:'F',7:'G',9:'A',11:'B'};
+    if (base[pc]) return base[pc];
+    return (dir==='down' ? FLAT_TEXT[pc] : SHARP_TEXT[pc]) || noteNames[pc];
+  }
+
+  // Say "C sharp four" etc. Optionally include the octave.
+  function speakNoteName(midi, dir, {includeOctave=true, rate=1.0, volume=1.0}={}){
+    try{
+      tts.init();
+      const pc = midi % 12;
+      const oct = Math.floor(midi/12) - 1;
+      const text = includeOctave ? `${pcSpeakable(pc, dir)} ${oct}` : pcSpeakable(pc, dir);
+      const u = new SpeechSynthesisUtterance(text);
+      const voice = tts.pickVoice();
+      if (voice) u.voice = voice;
+      u.rate = Math.max(0.5, Math.min(1.4, rate));
+      u.volume = Math.max(0, Math.min(1, volume));
+      speechSynthesis.cancel(); // stop any prior utterance
+      speechSynthesis.speak(u);
+    }catch(e){ console.warn('TTS error', e); }
+  }
+
+  // Play a soft reference tone underneath speech to “pin” the exact pitch.
+  function speakWithReference(midi, start, dur, dir){
+    // Start speech immediately (tts has its own timing)
+    speakNoteName(midi, dir, {includeOctave:true, rate:1.0, volume:1.0});
+    // Quiet helper tone at precise frequency
+    const ctx = audio.ctx;
+    const f = midiToFreq(midi);
+    const osc = ctx.createOscillator();
+    const g  = ctx.createGain();
+    osc.type='sine'; osc.frequency.value=f;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(0.16, start + 0.03); // fade in
+    g.gain.setValueAtTime(0.16, start + Math.max(0, dur - 0.12));
+    g.gain.linearRampToValueAtTime(0.0001, start + dur); // fade out
+    osc.connect(g); g.connect(audio.master);
+    osc.start(start);
+    osc.stop(start + dur + 0.05);
+  }
+
+  function solfegePhonetic(pc, dir){
+    // Diatonic
+    const DIA = {0:"doh", 2:"ray", 4:"mee", 5:"fah", 7:"sohl", 9:"lah", 11:"tee"};
+    // Sharps
+    const SHP = {1:"dee", 3:"ree", 6:"fee", 8:"see", 10:"lee"};
+    // Flats
+    const FLT = {1:"rah", 3:"may", 6:"say", 8:"lay", 10:"tay"};
+
+    if (DIA[pc]) return DIA[pc];
+    return (dir === 'down' ? FLT[pc] : SHP[pc]);
+  }
+
+    // Build the spoken label based on mode: "note" or "solfege"
+  function buildSpokenLabel(midi, dir, {includeOctave=true, mode='note'}={}){
+    const pc  = midi % 12;
+    const oct = Math.floor(midi/12) - 1;
+
+    if (mode === 'solfege'){
+      const syl = solfegePhonetic(pc, dir);
+      return includeOctave ? `${syl} ${oct}` : syl;
+    }
+
+    // (Note-name logic stays the same)
+    const name = pcSpeakable(pc, dir);
+    return includeOctave ? `${name} ${oct}` : name;
+  }
+
+  // Async speak for any label
+  function speakLabelAsync(midi, dir, {includeOctave=true, rate=1.0, volume=1.0, mode='note'}={}){
+    return new Promise(resolve => {
+      try{
+        tts.init();
+        const text = buildSpokenLabel(midi, dir, {includeOctave, mode});
+        const u = new SpeechSynthesisUtterance(text);
+        const voice = tts.pickVoice();
+        if (voice) u.voice = voice;
+        u.rate = Math.max(0.5, Math.min(1.4, rate));
+        u.volume = Math.max(0, Math.min(1, volume));
+
+        let settled = false;
+        const settle = () => { if (!settled){ settled = true; resolve(); } };
+        u.onend = settle; u.onerror = settle;
+
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+
+        const approxMs = Math.max(600, text.length * 60 / u.rate);
+        setTimeout(settle, approxMs + 200);
+      }catch(e){ console.warn('TTS error', e); resolve(); }
+    });
+  }
+
 
   // ===== Audio =====
   const audio={ctx:null, master:null,
@@ -194,6 +343,12 @@
   const stopBtn=document.getElementById('stopBtn');
   const statusEl=document.getElementById('status');
   const kbdEl=document.getElementById('keyboard');
+  const revealModeEl = document.getElementById('revealMode');
+  const speakRefEl   = document.getElementById('speakRef');
+  const speechContentEl = document.getElementById('speechContent');
+  const speakOctaveEl   = document.getElementById('speakOctave');
+
+
 
   // ===== Pitch-class toggles =====
   const pcChecks=[];
@@ -388,12 +543,80 @@
       await sleepSec(step);
     }
   }
+  
   async function revealAllSequential(midis){
-    for(const m of midis.slice().sort((a,b)=>a-b)){
-      await revealOne(m);
-      await sleepSec(0.1);
+    const mode = (revealModeEl && revealModeEl.value) || 'scale';
+    const ordered = midis.slice().sort((a,b)=>a-b);
+
+    if (mode === 'speak'){
+      for (const m of ordered){
+        await revealOneSpeak(m);
+        await sleepSec(0.1);
+      }
+    } else {
+      for (const m of ordered){
+        await revealOne(m);
+        await sleepSec(0.1);
+      }
     }
   }
+
+  async function revealOneSpeak(midi){
+    const step    = revealStepSec();
+    const toneDur = Math.max(0.4, step * 0.8);
+    const { dir } = buildReveal_Fsplit(midi);
+
+    const mode = (speechContentEl && speechContentEl.value) || 'note';
+    const includeOctave = !!(speakOctaveEl && speakOctaveEl.checked);
+
+    // 1) Speak first (await)
+    await speakLabelAsync(midi, dir, { includeOctave, rate:1.0, volume:1.0, mode });
+
+    // Brief gap
+    await sleepSec(0.08);
+
+    // 2) Then play the pitch once
+    const t = audio.t() + 0.02;
+    lightPC(midi % 12, t, toneDur);
+    scheduleTone(midi, t, toneDur, 0.95, null);
+
+    await sleepSec(toneDur + 0.05);
+  }
+
+
+
+  function speakNoteNameAsync(midi, dir, {includeOctave=true, rate=1.0, volume=1.0}={}){
+    return new Promise(resolve => {
+      try{
+        tts.init();
+        const pc = midi % 12;
+        const oct = Math.floor(midi/12) - 1;
+        const text = includeOctave ? `${pcSpeakable(pc, dir)} ${oct}` : pcSpeakable(pc, dir);
+        const u = new SpeechSynthesisUtterance(text);
+        const voice = tts.pickVoice();
+        if (voice) u.voice = voice;
+        u.rate = Math.max(0.5, Math.min(1.4, rate));
+        u.volume = Math.max(0, Math.min(1, volume));
+
+        // Resolve when speech ends (with a safe fallback)
+        let settled = false;
+        const settle = () => { if (!settled){ settled = true; resolve(); } };
+        u.onend = settle;
+        u.onerror = settle;
+
+        speechSynthesis.cancel(); // stop any prior utterance
+        speechSynthesis.speak(u);
+
+        // Fallback in case onend never fires on some browsers
+        const approxMs = Math.max(600, text.length * 60 / u.rate); // crude length-based estimate
+        setTimeout(settle, approxMs + 200);
+      }catch(e){
+        console.warn('TTS error', e);
+        resolve();
+      }
+    });
+  }
+
 
   // ===== Audio unlock + Start/Stop =====
   function unlockAudioOnce(){
@@ -437,6 +660,11 @@
   // Single (correct) registration – no duplicate consts here.
   startBtn.addEventListener('click',()=>{ if(!running) start(); });
   stopBtn.addEventListener('click',stop);
+
+  revealModeEl.addEventListener('change', () => {
+    if (revealModeEl.value === 'speak') { try { tts.init(); } catch(_){} }
+  });
+
 
 })();
 </script>
