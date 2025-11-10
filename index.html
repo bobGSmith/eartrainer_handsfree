@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
-<title>Hands-Free Solfège Ear Trainer + Chord Recognition</title>
+<title>Hands-Free Ear Trainer (Notes + Chords)</title>
 <style>
-  :root{--bg:#0e0f12;--panel:#171a20;--text:#eaeef5;--muted:#9aa4b2;--accent:#2a6df0}
+  :root{--bg:#0e0f12;--panel:#171a20;--text:#eaeef5;--muted:#9aa4b2}
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
   header{padding:16px 20px;border-bottom:1px solid #1f222b;background:linear-gradient(180deg,#12141a,#0e0f12 60%)}
   h1{margin:0 0 4px;font-size:18px}.sub{margin:0;color:var(--muted);font-size:13px}
-  .wrap{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px}
+  .wrap{max-width:1000px;margin:0 auto;padding:16px;display:grid;gap:16px}
   .panel{background:var(--panel);border:1px solid #252935;border-radius:12px;padding:12px}
   .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-  fieldset{border:1px solid #2a3040;border-radius:10px;padding:10px 12px;min-width:280px}
+  fieldset{border:1px solid #2a3040;border-radius:10px;padding:10px 12px}
   legend{color:var(--muted);font-size:12px;padding:0 6px}
   label{font-size:13px}
   select,input[type=number]{background:#0f1116;color:#eaeef5;border:1px solid #2a3040;border-radius:8px;padding:6px 8px}
@@ -22,11 +22,12 @@
   .hint{color:var(--muted);font-size:12px}
 
   /* Tabs */
-  .tabs{display:flex;gap:8px;padding:6px}
-  .tabbtn{background:#131721;border:1px solid #2a3040;color:#cfe0ff;padding:10px 12px;border-radius:10px;cursor:pointer}
-  .tabbtn.active{background:#20304a;border-color:#3b5ca6;color:#fff}
-  .tabpage{display:none}
-  .tabpage.active{display:block}
+  .tabs{display:flex;gap:6px;border-bottom:1px solid #252935;padding:0 4px}
+  .tab{padding:8px 12px;border:1px solid #252935;border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#13171e;color:#b9c3d1;cursor:pointer}
+  .tab.active{background:#1a1f28;color:#eaeef5}
+  .tabpanes{border:1px solid #252935;border-radius:12px;padding:0}
+  .pane{display:none;padding:12px}
+  .pane.active{display:block}
 
   /* Keyboard */
   .kbd-wrap{display:flex;justify-content:center}
@@ -46,7 +47,7 @@
   .white.lit .solf-tag{color:#013}.black.lit .solf-tag{color:#e8f7ff}
   .white.lit .variant-tag{color:#012}.black.lit .variant-tag{color:#e8f7ff}
 
-  /* Overlay */
+  /* Big overlay */
   .syllable-pop{
     position:fixed; left:50%; top:14%; transform:translateX(-50%);
     font-size:48px; font-weight:800; letter-spacing:1px;
@@ -57,20 +58,14 @@
   }
   .syllable-pop.show{ opacity:1; }
 
-  /* Audio unlock overlay */
+  /* Audio unlock */
   #unlockAudio{
     position:fixed; inset:0; z-index:99999; background:#0e0f12; display:flex;
     align-items:center; justify-content:center; border:0; color:#eaeef5;
     font-size:20px; font-weight:700; letter-spacing:.3px
   }
 
-  /* Checkbox grids */
-  .grid12{display:grid;grid-template-columns:repeat(6,minmax(80px,1fr));gap:8px 10px}
-  .gridQual{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px 10px}
-
-  @media (max-width:680px){
-    .grid12{grid-template-columns:repeat(4,minmax(72px,1fr))}
-    .gridQual{grid-template-columns:repeat(2,minmax(120px,1fr))}
+  @media (max-width:520px){
     button, select, input[type=number]{ padding:12px 14px; font-size:16px }
     .panel{ padding:10px }
   }
@@ -78,8 +73,8 @@
 </head>
 <body>
 <header>
-  <h1>Hands-Free Trainer</h1>
-  <p class="sub">Single notes (solfège or names) • Chord recognition with I–IV–V cadence</p>
+  <h1>Hands-Free Ear Trainer</h1>
+  <p class="sub">Train your ears in the background</p>
 </header>
 
 <!-- Audio unlock (iOS Safari safe) -->
@@ -87,28 +82,25 @@
 
 <div class="wrap">
   <!-- Tabs -->
-  <div class="panel">
-    <div class="tabs">
-      <button class="tabbtn active" data-tab="notesTab">Single Notes</button>
-      <button class="tabbtn" data-tab="chordsTab">Chord Recognition</button>
-    </div>
+  <div class="tabs">
+    <button class="tab active" data-pane="notesPane">Notes</button>
+    <button class="tab" data-pane="chordsPane">Chords</button>
   </div>
-
-  <!-- ===== Single Notes Tab ===== -->
-  <div id="notesTab" class="tabpage active">
-    <div class="panel">
+  <div class="tabpanes panel">
+    <!-- NOTES PANE -->
+    <div id="notesPane" class="pane active">
       <div class="row">
         <fieldset>
           <legend>Pitch-classes (targets)</legend>
-          <div class="grid12" id="pcRow"></div>
+          <div class="row" id="pcRow_notes"></div>
           <div class="hint">Tick which of the 12 notes may be chosen as targets.</div>
         </fieldset>
 
         <fieldset>
           <legend>Range for targets</legend>
           <div class="row">
-            <label>Lowest</label><select id="lowSel"></select>
-            <label>Highest</label><select id="highSel"></select>
+            <label>Lowest</label><select id="lowSel_notes"></select>
+            <label>Highest</label><select id="highSel_notes"></select>
           </div>
           <div class="hint">Only the target(s) are range-filtered; reveal stays in each target’s octave.</div>
         </fieldset>
@@ -116,23 +108,23 @@
         <fieldset>
           <legend>Flow</legend>
           <div class="row">
-            <label>Cadence every</label><input id="cadEvery" type="number" min="1" value="1" style="width:72px"> rounds
-            <label>BPM (cadence)</label><input id="bpm" type="number" min="30" max="200" value="88" style="width:80px">
+            <label>Cadence every</label><input id="cadEvery_notes" type="number" min="1" value="1" style="width:72px"> rounds
+            <label>BPM (cadence)</label><input id="bpm_notes" type="number" min="30" max="200" value="88" style="width:80px">
             <label>Targets at once</label>
-            <select id="stackCount"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+            <select id="stackCount_notes"><option>1</option><option>2</option><option>3</option><option>4</option></select>
           </div>
           <div class="row">
-            <label>Pre-note silence</label><input id="preSil" type="number" min="0" step="0.1" value="0.5" style="width:80px"> s
-            <label>Note→reveal wait</label><input id="revealWait" type="number" min="0" step="0.1" value="1.0" style="width:80px"> s
-            <label>Between rounds</label><input id="between" type="number" min="0" step="0.1" value="1.0" style="width:80px"> s
+            <label>Pre-note silence</label><input id="preSil_notes" type="number" min="0" step="0.1" value="0.5" style="width:80px"> s
+            <label>Note→reveal wait</label><input id="revealWait_notes" type="number" min="0" step="0.1" value="1.4" style="width:80px"> s
+            <label>Between rounds</label><input id="between_notes" type="number" min="0" step="0.1" value="1.2" style="width:80px"> s
           </div>
         </fieldset>
 
         <fieldset>
           <legend>Timing</legend>
           <div class="row">
-            <label>Note duration (target)</label><input id="noteLen" type="number" min="0.05" step="0.05" value="0.8" style="width:90px"> s
-            <label>Reveal tempo</label><input id="revealBpm" type="number" min="30" max="360" value="80" style="width:90px"> BPM
+            <label>Note duration (target)</label><input id="noteLen_notes" type="number" min="0.05" step="0.05" value="0.8" style="width:90px"> s
+            <label>Reveal tempo</label><input id="revealBpm_notes" type="number" min="30" max="360" value="80" style="width:90px"> BPM
           </div>
           <div class="hint">Reveal notes auto-shortened (~80% of step) so they never overlap.</div>
         </fieldset>
@@ -141,91 +133,109 @@
           <legend>Reveal Mode</legend>
           <div class="row">
             <label>How to reveal</label>
-            <select id="revealMode" style="width:180px">
+            <select id="revealMode_notes" style="width:180px">
               <option value="scale">Play scale (current)</option>
-              <option value="speak">Speak (name or solfège)</option>
+              <option value="speak">Speak</option>
             </select>
-            <label><input id="speakRef" type="checkbox"> Mix quiet reference tone (for simultaneous mode)</label>
+            <label>
+              <input id="speakRef_notes" type="checkbox">
+              Mix quiet reference tone (only for simultaneous mode)
+            </label>
           </div>
           <div class="row">
             <label>Spoken content</label>
-            <select id="speechContent" style="width:180px">
+            <select id="speechContent_notes" style="width:180px">
               <option value="note">Note names (C, C sharp…)</option>
-              <option value="solfege">Solfège (Do/Di/Ra…)</option>
+              <option value="solfege">Solfège (Doh, Ray…)</option>
             </select>
-            <label><input id="speakOctave" type="checkbox" checked> Include octave number</label>
+            <label>
+              <input id="speakOctave_notes" type="checkbox" checked>
+              Include octave number
+            </label>
           </div>
         </fieldset>
       </div>
-    </div>
 
-    <div class="panel">
-      <div class="row">
-        <button id="startBtn">Start</button>
-        <button id="stopBtn">Stop</button>
-        <span id="status" class="hint">Stopped.</span>
+      <div class="panel" style="margin-top:12px">
+        <div class="row">
+          <button id="startBtn_notes">Start</button>
+          <button id="stopBtn_notes">Stop</button>
+          <span id="status_notes" class="hint">Stopped.</span>
+        </div>
+      </div>
+
+      <div class="panel kbd-wrap">
+        <div id="keyboard_notes" class="keyboard" aria-label="Single-octave keyboard"></div>
       </div>
     </div>
 
-    <div class="panel kbd-wrap">
-      <div id="keyboard" class="keyboard" aria-label="Single-octave keyboard"></div>
-    </div>
-  </div>
-
-  <!-- ===== Chords Tab ===== -->
-  <div id="chordsTab" class="tabpage">
-    <div class="panel">
+    <!-- CHORDS PANE -->
+    <div id="chordsPane" class="pane">
       <div class="row">
         <fieldset>
-          <legend>Roots (possible chord tonics)</legend>
-          <div class="grid12" id="rootRow"></div>
-          <div class="hint">Choose which of the 12 pitch-classes can be the chord root.</div>
+          <legend>Chord roots (12-PC)</legend>
+          <div class="row" id="pcRow_chords"></div>
+          <div class="hint">Choose which roots can be used for the random chord (includes non-diatonic roots).</div>
         </fieldset>
 
         <fieldset>
-          <legend>Qualities</legend>
-          <div class="gridQual">
-            <label><input class="qualTri" type="checkbox" value="maj" checked> Major</label>
-            <label><input class="qualTri" type="checkbox" value="min" checked> Minor</label>
-            <label><input class="qualTri" type="checkbox" value="dim"> Diminished</label>
-            <label><input class="qualTri" type="checkbox" value="aug"> Augmented</label>
-
-            <label><input id="allow7" type="checkbox" checked> Include sevenths</label>
-            <label><input class="qual7" type="checkbox" value="dom7" checked> Dominant 7</label>
-            <label><input class="qual7" type="checkbox" value="maj7" checked> Major 7</label>
-            <label><input class="qual7" type="checkbox" value="min7" checked> Minor 7</label>
-            <label><input class="qual7" type="checkbox" value="m7b5"> Half-dim 7 (m7♭5)</label>
-            <label><input class="qual7" type="checkbox" value="dim7"> Diminished 7</label>
+          <legend>Chord qualities</legend>
+          <div class="row" id="qualTriads">
+            <label><input type="checkbox" class="qual" value="maj" checked> Major</label>
+            <label><input type="checkbox" class="qual" value="min" checked> Minor</label>
+            <label><input type="checkbox" class="qual" value="dim" checked> Diminished</label>
+            <label><input type="checkbox" class="qual" value="aug"> Augmented</label>
           </div>
-          <div class="hint">Uncheck “Include sevenths” to ignore all 7th-chord types.</div>
+          <div class="row" id="qual7ths">
+            <label><input type="checkbox" class="qual7" value="maj7" checked> maj7</label>
+            <label><input type="checkbox" class="qual7" value="min7" checked> min7</label>
+            <label><input type="checkbox" class="qual7" value="dom7" checked> 7 (dominant)</label>
+            <label><input type="checkbox" class="qual7" value="halfdim7"> ø7 (m7♭5)</label>
+            <label><input type="checkbox" class="qual7" value="dim7"> o7 (dim7)</label>
+          </div>
+          <div class="hint">Select exactly which chord qualities you want the trainer to use (triads and/or sevenths).</div>
         </fieldset>
 
         <fieldset>
-          <legend>Voicing & Flow</legend>
+          <legend>Voicing</legend>
           <div class="row">
-            <label><input id="allowInv" type="checkbox" checked> Allow inversions</label>
-            <label>Chord length</label><input id="ch_dur" type="number" min="0.2" step="0.1" value="1.2" style="width:90px"> s
-            <label>Cadence BPM</label><input id="ch_bpm" type="number" min="30" max="200" value="88" style="width:80px">
-            <label>Between rounds</label><input id="ch_between" type="number" min="0" step="0.1" value="1.0" style="width:80px"> s
-          </div>
-          <div class="row">
-            <label>Speak chord name</label>
-            <select id="namePref" style="width:160px">
-              <option value="auto">Auto (♯/♭)</option>
-              <option value="sharps">Prefer sharps</option>
-              <option value="flats">Prefer flats</option>
+            <label>Inversions</label>
+            <select id="invMode" style="width:160px">
+              <option value="root">Root only</option>
+              <option value="any" selected>Include inversions</option>
             </select>
-            <label><input id="sayInversion" type="checkbox"> Say inversion (optional)</label>
           </div>
         </fieldset>
-      </div>
-    </div>
 
-    <div class="panel">
-      <div class="row">
-        <button id="ch_startBtn">Start</button>
-        <button id="ch_stopBtn">Stop</button>
-        <span id="ch_status" class="hint">Stopped.</span>
+        <fieldset>
+          <legend>Cadence & timing</legend>
+          <div class="row">
+            <label>BPM (cadence)</label><input id="bpm_chords" type="number" min="30" max="200" value="88" style="width:80px">
+            <label>Cadence chord length</label>
+            <select id="cadBeatLen" style="width:120px">
+              <option value="q" selected>Quarter</option>
+              <option value="h">Half</option>
+            </select>
+            <label>Post-cadence rest (beats)</label><input id="postCadBeats" type="number" min="0" step="1" value="1" style="width:70px">
+          </div>
+          <div class="row">
+            <label>Delay before reveal (beats)</label><input id="revealBeats" type="number" min="0" step="0.5" value="2" style="width:80px">
+            <label>Chord duration</label><input id="chordDur" type="number" min="0.2" step="0.1" value="1.0" style="width:80px"> s
+          </div>
+          <div class="hint">Gaps are tied to the cadence BPM so the space “feels” musical.</div>
+        </fieldset>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <div class="row">
+          <button id="startBtn_chords">Start</button>
+          <button id="stopBtn_chords">Stop</button>
+          <span id="status_chords" class="hint">Stopped.</span>
+        </div>
+      </div>
+
+      <div class="panel kbd-wrap">
+        <div id="keyboard_chords" class="keyboard" aria-label="Single-octave keyboard"></div>
       </div>
     </div>
   </div>
@@ -235,21 +245,8 @@
 
 <script>
 (() => {
-  // ===== Tabs =====
-  const tabButtons = document.querySelectorAll('.tabbtn');
-  const pages = document.querySelectorAll('.tabpage');
-  tabButtons.forEach(b=>{
-    b.addEventListener('click', ()=>{
-      tabButtons.forEach(x=>x.classList.remove('active'));
-      pages.forEach(p=>p.classList.remove('active'));
-      b.classList.add('active');
-      document.getElementById(b.dataset.tab).classList.add('active');
-    });
-  });
-
   // ===== State =====
-  let running=false, round=0, audioUnlocked=false;
-  let ch_running=false, ch_round=0;
+  let running_notes=false, running_chords=false, audioUnlocked=false;
   let wakeLock=null, wakeLockEnabled=true;
 
   // ===== Music helpers =====
@@ -260,76 +257,19 @@
   const midiToName=m=>`${noteNames[m%12]}${Math.floor(m/12)-1}`;
   const nearestLocalCDown=m=>Math.floor(m/12)*12;
   const isAccidental=m=>!diatonicPCs.has(m%12);
+  const pcToNameText = pc => ["C","C sharp","D","D sharp","E","F","F sharp","G","G sharp","A","A sharp","B"][pc];
 
-  // Kodály syllables
+  // Kodály syllables (+ phonetic for TTS)
   const DIA = {0:"DO",2:"RE",4:"MI",5:"FA",7:"SOL",9:"LA",11:"TI"};
   const SHP = {1:"DI",3:"RI",6:"FI",8:"SI",10:"LI"};
   const FLT = {1:"RA",3:"ME",6:"SE",8:"LE",10:"TE"};
   function syllableForPC(pc, dir){ if(DIA[pc]) return DIA[pc]; return dir==='down'?FLT[pc]:SHP[pc]; }
-
-  // ===== TTS helpers =====
-  const tts = {
-    ready:false, voices:[],
-    init(){
-      if (this.ready) return;
-      const load=()=>{ this.voices = speechSynthesis.getVoices()||[]; this.ready=true; };
-      load(); window.speechSynthesis.onvoiceschanged = load;
-    },
-    pickVoice(){ return this.voices.find(v=>/en(-|_|$)/i.test(v.lang)) || this.voices[0] || null; }
-  };
-
-  const SHARP_TEXT = {1:'C sharp',3:'D sharp',6:'F sharp',8:'G sharp',10:'A sharp'};
-  const FLAT_TEXT  = {1:'D flat', 3:'E flat', 6:'G flat', 8:'A flat', 10:'B flat'};
-  function pcSpeakable(pc, dir){
-    const base={0:'C',2:'D',4:'E',5:'F',7:'G',9:'A',11:'B'};
-    if (base[pc]) return base[pc];
-    return (dir==='down'? FLAT_TEXT[pc] : SHARP_TEXT[pc]) || noteNames[pc];
-  }
-
-  // Solfège phonetics for better TTS
   function solfegePhonetic(pc, dir){
-    const DIAp = {0:"doh", 2:"ray", 4:"mee", 5:"fah", 7:"sohl", 9:"lah", 11:"tee"};
-    const SHPp = {1:"dee", 3:"ree", 6:"fee", 8:"see", 10:"lee"};
-    const FLTp = {1:"rah", 3:"may", 6:"say", 8:"lay", 10:"tay"};
+    const DIAp={0:"doh",2:"ray",4:"mee",5:"fah",7:"sohl",9:"lah",11:"tee"};
+    const SHPp={1:"dee",3:"ree",6:"fee",8:"see",10:"lee"};
+    const FLTp={1:"rah",3:"may",6:"say",8:"lay",10:"tay"};
     if (DIAp[pc]) return DIAp[pc];
-    return (dir==='down'? FLTp[pc] : SHPp[pc]);
-  }
-
-  function buildSpokenLabel(midi, dir, {includeOctave=true, mode='note'}={}){
-    const pc=midi%12, oct=Math.floor(midi/12)-1;
-    if (mode==='solfege'){
-      const syl=solfegePhonetic(pc,dir);
-      return includeOctave? `${syl} ${oct}` : syl;
-    }
-    const name=pcSpeakable(pc,dir);
-    return includeOctave? `${name} ${oct}` : name;
-  }
-
-  function speakLabelAsync(textOrMidi, maybeDir, opts={}){
-    // Accept either (string) or (midi, dir, opts)
-    let text;
-    if (typeof textOrMidi === 'string'){
-      text = textOrMidi;
-    } else {
-      const midi = textOrMidi;
-      const dir  = maybeDir;
-      const {includeOctave=true, rate=1.0, volume=1.0, mode='note'} = opts||{};
-      text = buildSpokenLabel(midi, dir, {includeOctave, mode});
-      // quick normalisation: e.g., "flat" pronunciations are fine
-    }
-    return new Promise(resolve=>{
-      try{
-        tts.init();
-        const u=new SpeechSynthesisUtterance(text);
-        const v=tts.pickVoice(); if (v) u.voice=v;
-        u.rate=Math.max(0.5,Math.min(1.4,(opts.rate??1.0)));
-        u.volume=Math.max(0,Math.min(1,(opts.volume??1.0)));
-        let done=false; const settle=()=>{ if(!done){done=true; resolve();} };
-        u.onend=settle; u.onerror=settle;
-        speechSynthesis.cancel(); speechSynthesis.speak(u);
-        const approxMs=Math.max(600, text.length*60/u.rate); setTimeout(settle, approxMs+300);
-      }catch(e){ console.warn('TTS error',e); resolve(); }
-    });
+    return (dir==='down'?FLTp[pc]:SHPp[pc]);
   }
 
   // ===== Audio =====
@@ -338,185 +278,206 @@
     t(){ return this.ctx?this.ctx.currentTime:0; }
   };
 
+  // ===== TTS =====
+  const tts = {
+    ready:false, voices:[],
+    init(){ if(this.ready) return;
+      const load=()=>{ this.voices=speechSynthesis.getVoices()||[]; this.ready=true; };
+      load(); window.speechSynthesis.onvoiceschanged=load;
+    },
+    pickVoice(){ return this.voices.find(v=>/en(-|_|$)/i.test(v.lang)) || this.voices[0] || null; }
+  };
+  function speakAsyncText(text,{rate=1.0,volume=1.0}={}){
+    return new Promise(res=>{
+      try{
+        tts.init();
+        const u=new SpeechSynthesisUtterance(text);
+        const v=tts.pickVoice(); if(v) u.voice=v;
+        u.rate=Math.max(0.5,Math.min(1.4,rate)); u.volume=Math.max(0,Math.min(1,volume));
+        let done=false; const settle=()=>{ if(!done){done=true;res();} };
+        u.onend=settle; u.onerror=settle;
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+        const approxMs=Math.max(600, text.length*60/u.rate); setTimeout(settle, approxMs+300);
+      }catch(e){ console.warn(e); res(); }
+    });
+  }
+
+  // ===== UI helpers (shared) =====
+  function quarterSec(bpm){ return 60/Math.max(30,+bpm); }
+
   // ===== Wake Lock =====
   async function requestWakeLock(){
-    try{ if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{}); } }
-    catch(err){ /* ignore */ }
+    try{ if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release',()=>console.log('Wake Lock released'));
+    }}catch(err){ console.warn('Wake Lock error',err); }
   }
   function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible'){
       if(wakeLockEnabled) requestWakeLock();
       if(audio.ctx && audio.ctx.state!=='running'){ audio.ctx.resume().catch(()=>{}); }
-    } else { releaseWakeLock(); }
+    }else{ releaseWakeLock(); }
   });
 
-  // ===== UI refs (Notes) =====
-  const pcRow=document.getElementById('pcRow');
-  const lowSel=document.getElementById('lowSel');
-  const highSel=document.getElementById('highSel');
-  const cadEvery=document.getElementById('cadEvery');
-  const bpmEl=document.getElementById('bpm');
-  const preSil=document.getElementById('preSil');
-  const revealWait=document.getElementById('revealWait');
-  const between=document.getElementById('between');
-  const noteLen=document.getElementById('noteLen');
-  const revealBpm=document.getElementById('revealBpm');
-  const stackCountEl=document.getElementById('stackCount');
-  const startBtn=document.getElementById('startBtn');
-  const stopBtn=document.getElementById('stopBtn');
-  const statusEl=document.getElementById('status');
-  const kbdEl=document.getElementById('keyboard');
-  const revealModeEl=document.getElementById('revealMode');
-  const speakRefEl=document.getElementById('speakRef');
-  const speechContentEl=document.getElementById('speechContent');
-  const speakOctaveEl=document.getElementById('speakOctave');
+  // ===== Keyboards (two panes) =====
+  function makeKeyboard(kbdEl){
+    let WHITE_W, WHITE_H, BLACK_W, BLACK_H;
+    const whitePC=[0,2,4,5,7,9,11];
+    const blackAfter={0:1,2:3,5:6,7:8,9:10};
+    const pcToKeyEl=new Map();
 
-  // ===== UI refs (Chords) =====
-  const rootRow=document.getElementById('rootRow');
-  const ch_startBtn=document.getElementById('ch_startBtn');
-  const ch_stopBtn=document.getElementById('ch_stopBtn');
-  const ch_status=document.getElementById('ch_status');
-  const ch_dur=document.getElementById('ch_dur');
-  const ch_bpm=document.getElementById('ch_bpm');
-  const ch_between=document.getElementById('ch_between');
-  const allow7=document.getElementById('allow7');
-  const allowInv=document.getElementById('allowInv');
-  const sayInversion=document.getElementById('sayInversion');
-  const namePref=document.getElementById('namePref');
-
-  // ===== Pitch-class toggles (NOTES) =====
-  // Default: ALL SELECTED (you asked for this)
-  const pcChecks=[];
-  for(let pc=0;pc<12;pc++){
-    const wrap=document.createElement('label'); wrap.style.display='flex'; wrap.style.gap='6px'; wrap.style.alignItems='center';
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.value=pc; cb.checked=true;
-    pcChecks.push(cb); wrap.appendChild(cb); wrap.appendChild(document.createTextNode(' '+noteNames[pc]));
-    pcRow.appendChild(wrap);
+    function size(){
+      const maxPx=Math.min(window.innerWidth-32, 560);
+      const perWhite=Math.max(28, Math.floor(maxPx/7));
+      WHITE_W=perWhite; WHITE_H=Math.round(WHITE_W*4.4);
+      BLACK_W=Math.round(WHITE_W*0.66); BLACK_H=Math.round(WHITE_H*0.68);
+      kbdEl.style.height=(WHITE_H+20)+'px';
+      kbdEl.style.width=(WHITE_W*7 + 2)+'px';
+    }
+    function enhFlat(pc){ const map={1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc]||''; }
+    function draw(){
+      kbdEl.innerHTML=''; pcToKeyEl.clear();
+      whitePC.forEach((pc,i)=>{
+        const x=i*WHITE_W;
+        const w=document.createElement('div'); w.className='white';
+        Object.assign(w.style,{width:WHITE_W+'px',height:WHITE_H+'px',left:x+'px',top:'0px'});
+        const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[pc];
+        const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA[pc];
+        const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent='';
+        w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag);
+        kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
+      });
+      whitePC.forEach((pc,i)=>{
+        if(!(pc in blackAfter)) return;
+        const bpc=blackAfter[pc];
+        const left=i*WHITE_W + (WHITE_W - BLACK_W/2);
+        const b=document.createElement('div'); b.className='black';
+        Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
+        const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enhFlat(bpc);
+        const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent='';
+        const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent=`${SHP[bpc]} / ${FLT[bpc]}`;
+        b.appendChild(tag); b.appendChild(solf); b.appendChild(varTag);
+        kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
+      });
+    }
+    function lightPC(pc,start,dur){
+      const el=pcToKeyEl.get(pc); if(!el) return;
+      const now=audio.t();
+      const msUntil=Math.max(0,(start-now)*1000), msDur=dur*1000;
+      setTimeout(()=>{el.classList.add('lit'); setTimeout(()=>el.classList.remove('lit'),msDur);},msUntil);
+    }
+    function lightChord(pcs,start,dur){ pcs.forEach(pc=>lightPC(pc,start,dur)); }
+    size(); draw(); window.addEventListener('resize',()=>{size(); draw();},{passive:true});
+    return {lightPC, lightChord};
   }
 
-  // ===== Range options (NOTES) =====
+  // ===== Synth: gentle additive + optional bass octave-up helper =====
+  function scheduleTone(midi, start, dur, vel=0.95){
+    const ctx = audio.ctx; const f = midiToFreq(midi);
+    const bus = ctx.createGain();
+    const A=0.01,D=0.06,S=0.75,R=Math.min(0.12,Math.max(0.06,dur*0.33));
+    const peak=vel, sustain=vel*S;
+    bus.gain.setValueAtTime(0.0001,start);
+    bus.gain.linearRampToValueAtTime(peak,start+A);
+    bus.gain.linearRampToValueAtTime(sustain,start+A+D);
+    bus.gain.setValueAtTime(sustain,start+Math.max(0,dur-R));
+    bus.gain.linearRampToValueAtTime(0.0001,start+dur);
+
+    const o1=ctx.createOscillator(); o1.type='sine'; o1.frequency.value=f; o1.connect(bus);
+    const o2=ctx.createOscillator(), g2=ctx.createGain(); o2.type='sine'; o2.frequency.value=f*2; g2.gain.value=0.18; o2.connect(g2); g2.connect(bus);
+    const o3=ctx.createOscillator(), g3=ctx.createGain(); o3.type='sine'; o3.frequency.value=f*3; g3.gain.value=0.10; o3.connect(g3); g3.connect(bus);
+    let oUp,gUp; if(f<130){ oUp=ctx.createOscillator(); gUp=ctx.createGain(); oUp.type='sine'; oUp.frequency.value=f*2; gUp.gain.value=0.22; oUp.connect(gUp); gUp.connect(bus); }
+    bus.connect(audio.master);
+    [o1,o2,o3].forEach(o=>o.start(start)); if(oUp) oUp.start(start);
+    const stopAt=start+dur+0.05; [o1,o2,o3].forEach(o=>o.stop(stopAt)); if(oUp) oUp.stop(stopAt);
+  }
+  function scheduleChord(midis,start,dur,vel=0.95){ midis.forEach(m=>scheduleTone(m,start,dur,vel)); }
+
+  // ===== Tabs =====
+  const tabs=[...document.querySelectorAll('.tab')];
+  const panes=[...document.querySelectorAll('.pane')];
+  tabs.forEach(t=>{
+    t.addEventListener('click',()=>{
+      tabs.forEach(x=>x.classList.remove('active'));
+      panes.forEach(x=>x.classList.remove('active'));
+      t.classList.add('active'); document.getElementById(t.dataset.pane).classList.add('active');
+    });
+  });
+
+  // ===== NOTES PANE LOGIC =====
+  const pcRow_notes=document.getElementById('pcRow_notes');
+  const lowSel_notes=document.getElementById('lowSel_notes');
+  const highSel_notes=document.getElementById('highSel_notes');
+  const cadEvery_notes=document.getElementById('cadEvery_notes');
+  const bpm_notes=document.getElementById('bpm_notes');
+  const preSil_notes=document.getElementById('preSil_notes');
+  const revealWait_notes=document.getElementById('revealWait_notes');
+  const between_notes=document.getElementById('between_notes');
+  const noteLen_notes=document.getElementById('noteLen_notes');
+  const revealBpm_notes=document.getElementById('revealBpm_notes');
+  const stackCount_notes=document.getElementById('stackCount_notes');
+  const startBtn_notes=document.getElementById('startBtn_notes');
+  const stopBtn_notes=document.getElementById('stopBtn_notes');
+  const status_notes=document.getElementById('status_notes');
+  const kbd_notes_el=document.getElementById('keyboard_notes');
+  const revealMode_notes=document.getElementById('revealMode_notes');
+  const speakRef_notes=document.getElementById('speakRef_notes');
+  const speechContent_notes=document.getElementById('speechContent_notes');
+  const speakOctave_notes=document.getElementById('speakOctave_notes');
+
+  const kbd_notes = makeKeyboard(kbd_notes_el);
+
+  // Build PC toggles (default: ALL SELECTED)
+  const pcChecks_notes=[];
+  for(let pc=0;pc<12;pc++){
+    const wrap=document.createElement('label');
+    const cb=document.createElement('input');
+    cb.type='checkbox'; cb.value=pc; cb.checked=true; // default all ON
+    pcChecks_notes.push(cb); wrap.appendChild(cb); wrap.appendChild(document.createTextNode(' '+noteNames[pc]));
+    pcRow_notes.appendChild(wrap);
+  }
+
+  // Range options
   const LOW=36,HIGH=96;
   function addOpts(sel,from,to,def){ for(let m=from;m<=to;m++){const o=document.createElement('option');o.value=m;o.textContent=midiToName(m);sel.appendChild(o);} sel.value=def; }
-  addOpts(lowSel,LOW,HIGH,48); addOpts(highSel,LOW,HIGH,84);
-  [lowSel,highSel].forEach(el=>el.addEventListener('change',()=>{ if(+lowSel.value>+highSel.value) highSel.value=lowSel.value; if(+highSel.value<+lowSel.value) lowSel.value=highSel.value; }));
+  addOpts(lowSel_notes,LOW,HIGH,48); addOpts(highSel_notes,LOW,HIGH,84);
+  [lowSel_notes,highSel_notes].forEach(el=>el.addEventListener('change',()=>{ if(+lowSel_notes.value>+highSel_notes.value) highSel_notes.value=lowSel_notes.value; if(+highSel_notes.value<+lowSel_notes.value) lowSel_notes.value=highSel_notes.value; }));
 
-  // ===== Responsive keyboard =====
-  let WHITE_W, WHITE_H, BLACK_W, BLACK_H;
-  const whitePC=[0,2,4,5,7,9,11];
-  const blackAfter={0:1,2:3,5:6,7:8,9:10};
-  const pcToKeyEl=new Map();
-
-  function sizeKeyboard(){
-    const maxPx=Math.min(window.innerWidth-32, 560);
-    const perWhite=Math.max(28, Math.floor(maxPx/7));
-    WHITE_W=perWhite; WHITE_H=Math.round(WHITE_W*4.4);
-    BLACK_W=Math.round(WHITE_W*0.66); BLACK_H=Math.round(WHITE_H*0.68);
-    kbdEl.style.height=(WHITE_H+20)+'px';
-    kbdEl.style.width=(WHITE_W*7 + 2)+'px';
-  }
-  function enharmonicFlatName(pc){ const map={1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc]||''; }
-  function drawSingleOctave(){
-    kbdEl.innerHTML=''; pcToKeyEl.clear();
-    whitePC.forEach((pc,i)=>{
-      const x=i*WHITE_W;
-      const w=document.createElement('div'); w.className='white';
-      Object.assign(w.style,{width:WHITE_W+'px',height:WHITE_H+'px',left:x+'px',top:'0px'});
-      const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[pc];
-      const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA[pc];
-      const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent='';
-      w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag);
-      kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
-    });
-    whitePC.forEach((pc,i)=>{
-      if(!(pc in blackAfter)) return;
-      const bpc=blackAfter[pc];
-      const left=i*WHITE_W + (WHITE_W - BLACK_W/2);
-      const b=document.createElement('div'); b.className='black';
-      Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
-      const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enharmonicFlatName(bpc);
-      const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent='';
-      const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent=`${SHP[bpc]} / ${FLT[bpc]}`;
-      b.appendChild(tag); b.appendChild(solf); b.appendChild(varTag);
-      kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
-    });
-  }
-  window.addEventListener('resize',()=>{ sizeKeyboard(); drawSingleOctave(); },{passive:true});
-  sizeKeyboard(); drawSingleOctave();
-
-  // ===== Overlay text =====
+  // Popup overlay
   const syllPop=document.getElementById('syllPop');
   function showSyllableAt(time,dur,text){
     const msUntil=Math.max(0,(time-audio.t())*1000), msDur=Math.max(150,dur*1000);
     setTimeout(()=>{syllPop.textContent=text; syllPop.classList.add('show'); setTimeout(()=>syllPop.classList.remove('show'),msDur);},msUntil);
   }
 
-  // ===== Synth / scheduling =====
-  function scheduleTone(midi, start, dur, vel=0.95, popupDir=null){
-    const ctx = audio.ctx; const f = midiToFreq(midi);
-    const bus = ctx.createGain();
-    const A=0.01, D=0.06, S=0.75, R=Math.min(0.12, Math.max(0.06, dur*0.33));
-    const peak=vel, sustain=vel*S;
+  function revealStepSec_notes(){ return 60/Math.max(30,+revealBpm_notes.value); }
 
-    bus.gain.setValueAtTime(0.0001, start);
-    bus.gain.linearRampToValueAtTime(peak, start + A);
-    bus.gain.linearRampToValueAtTime(sustain, start + A + D);
-    bus.gain.setValueAtTime(sustain, start + Math.max(0, dur - R));
-    bus.gain.linearRampToValueAtTime(0.0001, start + dur);
-
-    const o1 = ctx.createOscillator(); o1.type='sine'; o1.frequency.value=f; o1.connect(bus);
-    const o2 = ctx.createOscillator(), g2 = ctx.createGain(); o2.type='sine'; o2.frequency.value=f*2; g2.gain.value=0.18; o2.connect(g2); g2.connect(bus);
-    const o3 = ctx.createOscillator(), g3 = ctx.createGain(); o3.type='sine'; o3.frequency.value=f*3; g3.gain.value=0.10; o3.connect(g3); g3.connect(bus);
-
-    let oUp,gUp; if (f<130){ oUp=ctx.createOscillator(); gUp=ctx.createGain(); oUp.type='sine'; oUp.frequency.value=f*2; gUp.gain.value=0.22; oUp.connect(gUp); gUp.connect(bus); }
-
-    bus.connect(audio.master);
-    [o1,o2,o3].forEach(o=>o.start(start)); if(oUp) oUp.start(start);
-    const stopAt=start+dur+0.05; [o1,o2,o3].forEach(o=>o.stop(stopAt)); if(oUp) oUp.stop(stopAt);
-
-    lightPC(midi%12, start, dur);
-    if (popupDir!==undefined && popupDir!==null){ showSyllableAt(start, dur, syllableForPC(midi%12, popupDir)); }
-  }
-  function scheduleChord(midis,start,dur,vel=0.95){ midis.forEach(m=>scheduleTone(m,start,dur,vel,null)); }
-  function lightPC(pc,start,dur){
-    const el=pcToKeyEl.get(pc); if(!el) return;
-    const msUntil=Math.max(0,(start-audio.t())*1000), msDur=dur*1000;
-    setTimeout(()=>{el.classList.add('lit'); setTimeout(()=>el.classList.remove('lit'),msDur);},msUntil);
-  }
-  function sleepSec(s){ return new Promise(r=>setTimeout(r,s*1000)); }
-  function quarterSec(){ return 60/Math.max(30,+bpmEl.value); }
-  function revealStepSec(){ return 60/Math.max(30,+revealBpm.value); }
-
-  // ===== Cadence (C major) =====
-  async function playCadenceC(bpmOverride=null){
-    const q = (bpmOverride? (60/Math.max(30,bpmOverride)) : quarterSec());
-    const dur=q*0.9, g=0.9, t=audio.t()+0.02;
+  async function playCadence_notes(){
+    const q=quarterSec(+bpm_notes.value);
+    const dur=(q*(document.getElementById('cadBeatLen')?1:1))*0.9; // notes pane: fixed quarter-ish
+    const g=0.9, t=audio.t()+0.02;
     const I=[60,64,67], IV=[65,69,72], V=[67,71,74];
     scheduleChord(I,t,dur,g); scheduleChord(IV,t+q,dur,g); scheduleChord(V,t+2*q,dur,g); scheduleChord(I,t+3*q,dur*1.15,g);
-    await sleepSec(4*q+0.05);
+    await new Promise(r=>setTimeout(r,(4*q+0.05)*1000));
   }
 
-  // ===== NOTES: target picking + reveal =====
-  function pickPool(){
-    const l=+lowSel.value, h=+highSel.value;
-    const allowed=new Set(pcChecks.filter(cb=>cb.checked).map(cb=>+cb.value));
+  function pickPool_notes(){
+    const l=+lowSel_notes.value, h=+highSel_notes.value;
+    const allowed=new Set(pcChecks_notes.filter(cb=>cb.checked).map(cb=>+cb.value));
     const pool=[]; for(let m=l;m<=h;m++){ if(allowed.has(m%12)) pool.push(m); }
     return pool;
   }
-  function pickRandomTargets(k){
-    const pool=pickPool(); if(!pool.length) return [];
-    const chosen=[];
-    while(chosen.length<k && pool.length){
-      const idx=Math.floor(Math.random()*pool.length);
-      chosen.push(pool[idx]); pool.splice(idx,1);
+  function pickTargets_notes(k){
+    const pool=pickPool_notes(); if(!pool.length) return [];
+    const chosen=[]; const bag=pool.slice();
+    while(chosen.length<k && bag.length){
+      const idx=Math.floor(Math.random()*bag.length);
+      chosen.push(bag[idx]); bag.splice(idx,1);
     }
     return chosen.sort((a,b)=>a-b);
   }
-  async function playTargets(midis){
-    const len=parseFloat(noteLen.value);
-    scheduleChord(midis, audio.t()+0.02, len, 1.0);
-    await sleepSec(len*0.9);
-  }
+
   function buildReveal_Fsplit(midi){
     const localC=nearestLocalCDown(midi), topC=localC+12, pc=midi%12, goUp=(pc>=6);
     const seq=[midi];
@@ -530,40 +491,247 @@
       return {seq, dir:'down'};
     }
   }
-  async function revealOne(midi){
-    const step=revealStepSec(), dur=Math.max(0.05, step*0.8);
-    const {seq, dir}=buildReveal_Fsplit(midi);
-    for(const m of seq){ scheduleTone(m, audio.t()+0.02, dur, 0.95, dir); await sleepSec(step); }
+
+  // Speak label builder (notes)
+  function buildSpokenLabel_notes(midi, dir, {includeOctave=true, mode='note'}={}){
+    const pc=midi%12; const oct=Math.floor(midi/12)-1;
+    if(mode==='solfege'){
+      const syl=solfegePhonetic(pc,dir);
+      return includeOctave?`${syl} ${oct}`:syl;
+    }else{
+      const base=["C","C sharp","D","D sharp","E","F","F sharp","G","G sharp","A","A sharp","B"][pc];
+      return includeOctave?`${base} ${oct}`:base;
+    }
+  }
+  function speakLabelAsync_notes(midi, dir, {includeOctave=true, rate=1.0, volume=1.0, mode='note'}={}){
+    return speakAsyncText(buildSpokenLabel_notes(midi,dir,{includeOctave,mode}),{rate,volume});
   }
 
-  async function revealAllSequential(midis){
-    const mode=(revealModeEl&&revealModeEl.value)||'scale';
+  async function revealOne_notes(midi){
+    const step=revealStepSec_notes(), dur=Math.max(0.05, step*0.8);
+    const {seq, dir}=buildReveal_Fsplit(midi);
+    for(const m of seq){
+      const t=audio.t()+0.02; scheduleTone(m,t,dur,0.95);
+      kbd_notes.lightPC(m%12,t,dur);
+      showSyllableAt(t,dur,syllableForPC(m%12,dir));
+      await new Promise(r=>setTimeout(r, step*1000));
+    }
+  }
+  async function revealOneSpeak_notes(midi){
+    const step=revealStepSec_notes();
+    const toneDur=Math.max(0.4, step*0.8);
+    const {dir}=buildReveal_Fsplit(midi);
+
+    const mode=(speechContent_notes && speechContent_notes.value) || 'note';
+    const includeOctave=!!(speakOctave_notes && speakOctave_notes.checked);
+
+    await speakLabelAsync_notes(midi,dir,{includeOctave, rate:1.0, volume:1.0, mode});
+    await new Promise(r=>setTimeout(r, 80)); // tiny gap
+    const t=audio.t()+0.02;
+    scheduleTone(midi,t,toneDur,0.95);
+    kbd_notes.lightPC(midi%12,t,toneDur);
+    await new Promise(r=>setTimeout(r, (toneDur+0.05)*1000));
+  }
+  async function revealAllSequential_notes(midis){
+    const mode=(revealMode_notes && revealMode_notes.value) || 'scale';
     const ordered=midis.slice().sort((a,b)=>a-b);
     if(mode==='speak'){
-      for(const m of ordered){ await revealOneSpeak(m); await sleepSec(0.1); }
+      for(const m of ordered){ await revealOneSpeak_notes(m); await new Promise(r=>setTimeout(r,100)); }
     }else{
-      for(const m of ordered){ await revealOne(m); await sleepSec(0.1); }
+      for(const m of ordered){ await revealOne_notes(m); await new Promise(r=>setTimeout(r,100)); }
     }
   }
 
-  async function revealOneSpeak(midi){
-    const step=revealStepSec();
-    const toneDur=Math.max(0.4, step*0.8);
-    const {dir}=buildReveal_Fsplit(midi);
-    const speakMode=(speechContentEl&&speechContentEl.value)||'note';
-    const includeOctave=!!(speakOctaveEl&&speakOctaveEl.checked);
-    // Speak → small gap → play
-    await speakLabelAsync(midi, dir, {includeOctave, rate:1.0, volume:1.0, mode:speakMode});
-    await sleepSec(0.08);
-    const t=audio.t()+0.02; lightPC(midi%12, t, toneDur); scheduleTone(midi, t, toneDur, 0.95, null);
-    await sleepSec(toneDur+0.05);
+  async function start_notes(){
+    audio.init(); if(audio.ctx.state==='suspended'){ try{ await audio.ctx.resume(); }catch(e){} }
+    running_notes=true; startBtn_notes.classList.add('running'); status_notes.textContent='Running…';
+    if(wakeLockEnabled) requestWakeLock();
+    let round=0;
+
+    while(running_notes){
+      round++;
+      const n=Math.max(1,+cadEvery_notes.value);
+      if(((round-1)%n)===0){ await playCadence_notes(); }
+
+      await new Promise(r=>setTimeout(r, parseFloat(preSil_notes.value)*1000));
+      const k=Math.min(4, Math.max(1, parseInt(stackCount_notes.value,10)||1));
+      const targets=pickTargets_notes(k);
+      if(!targets.length){ status_notes.textContent='No valid notes in range/selection.'; stop_notes(); return; }
+
+      const len=parseFloat(noteLen_notes.value);
+      const t=audio.t()+0.02; scheduleChord(targets,t,len,1.0);
+      targets.forEach(m=>kbd_notes.lightPC(m%12,t,len));
+      await new Promise(r=>setTimeout(r, len*900)); // ~0.9
+
+      await new Promise(r=>setTimeout(r, parseFloat(revealWait_notes.value)*1000));
+      await revealAllSequential_notes(targets);
+      await new Promise(r=>setTimeout(r, parseFloat(between_notes.value)*1000));
+    }
+  }
+  function stop_notes(){ running_notes=false; startBtn_notes.classList.remove('running'); status_notes.textContent='Stopped.'; releaseWakeLock(); }
+
+  startBtn_notes.addEventListener('click',()=>{ if(!running_notes) start_notes(); });
+  stopBtn_notes.addEventListener('click',stop_notes);
+  revealMode_notes.addEventListener('change',()=>{ if(revealMode_notes.value==='speak'){ try{ tts.init(); }catch(_){} }});
+
+  // ===== CHORDS PANE LOGIC =====
+  const pcRow_chords=document.getElementById('pcRow_chords');
+  const bpm_chords=document.getElementById('bpm_chords');
+  const cadBeatLen=document.getElementById('cadBeatLen');
+  const postCadBeats=document.getElementById('postCadBeats');
+  const revealBeats=document.getElementById('revealBeats');
+  const chordDur=document.getElementById('chordDur');
+  const invMode=document.getElementById('invMode');
+  const startBtn_chords=document.getElementById('startBtn_chords');
+  const stopBtn_chords=document.getElementById('stopBtn_chords');
+  const status_chords=document.getElementById('status_chords');
+  const kbd_chords_el=document.getElementById('keyboard_chords');
+  const kbd_chords = makeKeyboard(kbd_chords_el);
+
+  // Root checkboxes (default ALL ON)
+  const pcChecks_chords=[];
+  for(let pc=0;pc<12;pc++){
+    const wrap=document.createElement('label');
+    const cb=document.createElement('input');
+    cb.type='checkbox'; cb.value=pc; cb.checked=true;
+    pcChecks_chords.push(cb); wrap.appendChild(cb); wrap.appendChild(document.createTextNode(' '+noteNames[pc]));
+    pcRow_chords.appendChild(wrap);
   }
 
-  // ===== NOTES: Start/Stop =====
+  function pickRootPC(){
+    const allowed=pcChecks_chords.filter(cb=>cb.checked).map(cb=>+cb.value);
+    if(!allowed.length) return null;
+    return allowed[Math.floor(Math.random()*allowed.length)];
+  }
+
+  function selectedQualities(){
+    const triads=[...document.querySelectorAll('#qualTriads .qual')].filter(x=>x.checked).map(x=>x.value);
+    const sevenths=[...document.querySelectorAll('#qual7ths .qual7')].filter(x=>x.checked).map(x=>x.value);
+    return {triads, sevenths};
+  }
+
+  function buildChordIntervals(kind){
+    switch(kind){
+      case 'maj': return [0,4,7];
+      case 'min': return [0,3,7];
+      case 'dim': return [0,3,6];
+      case 'aug': return [0,4,8];
+      case 'maj7': return [0,4,7,11];
+      case 'min7': return [0,3,7,10];
+      case 'dom7': return [0,4,7,10];
+      case 'halfdim7': return [0,3,6,10];
+      case 'dim7': return [0,3,6,9];
+      default: return [0,4,7];
+    }
+  }
+
+  function chordKindToSpeech(rootPC, kind){
+    const rootName = pcToNameText(rootPC);
+    const map={
+      maj: `${rootName} major`,
+      min: `${rootName} minor`,
+      dim: `${rootName} diminished`,
+      aug: `${rootName} augmented`,
+      maj7: `${rootName} major seven`,
+      min7: `${rootName} minor seven`,
+      dom7: `${rootName} seven`,
+      halfdim7: `${rootName} half diminished seven`,
+      dim7: `${rootName} diminished seven`,
+    };
+    return map[kind] || `${rootName} chord`;
+  }
+
+  // NEW: human-friendly inversion name
+  function inversionLabel(noteCount, invIdx){
+    if(invIdx===0) return 'root position';
+    const ord = ['first','second','third','fourth'];
+    const which = ord[invIdx-1] || `${invIdx}th`;
+    return `${which} inversion`;
+  }
+
+  // Modified to return inversion info along with midis
+  function buildChordMidis(rootPC, kind){
+    const base = 48 + rootPC; // C3=48
+    const ints = buildChordIntervals(kind).slice();
+    const allowInv = (invMode.value==='any');
+    const invCount = (ints.length===3?3:4);
+    const invIdx = allowInv ? Math.floor(Math.random()*invCount) : 0;
+    for(let i=0;i<invIdx;i++){ const x=ints.shift(); ints.push(x+12); }
+    const midis = ints.map(semi => base + semi);
+    const invLabel = inversionLabel(ints.length, invIdx);
+    return { midis, invIdx, invLabel };
+  }
+
+  function lightChordOnKey(kbd, midis, start, dur){
+    const pcs = [...new Set(midis.map(m=>m%12))];
+    kbd.lightChord(pcs, start, dur);
+  }
+
+  async function playCadence_chords(){
+    const q=quarterSec(+bpm_chords.value);
+    const beatLen = (cadBeatLen.value==='h') ? q*2 : q;
+    const dur=beatLen*0.9, g=0.9, t0=audio.t()+0.02;
+    const I=[60,64,67], IV=[65,69,72], V=[67,71,74];
+    scheduleChord(I,t0,dur,g);
+    scheduleChord(IV,t0+beatLen,dur,g);
+    scheduleChord(V,t0+2*beatLen,dur,g);
+    scheduleChord(I,t0+3*beatLen,dur*1.15,g);
+    const total = 4*beatLen;
+    await new Promise(r=>setTimeout(r,(total+0.05)*1000));
+    const restBeats = Math.max(0, +postCadBeats.value || 0);
+    if(restBeats>0){ await new Promise(r=>setTimeout(r, restBeats*q*1000)); }
+  }
+
+  async function start_chords(){
+    audio.init(); if(audio.ctx.state==='suspended'){ try{ await audio.ctx.resume(); }catch(e){} }
+    running_chords=true; startBtn_chords.classList.add('running'); status_chords.textContent='Running…';
+    if(wakeLockEnabled) requestWakeLock();
+
+    while(running_chords){
+      await playCadence_chords();
+
+      const rootPC = pickRootPC();
+      if(rootPC===null){ status_chords.textContent='Select at least one root.'; stop_chords(); return; }
+
+      const {triads,sevenths}=selectedQualities();
+      const bag=[...triads,...sevenths];
+      if(!bag.length){ status_chords.textContent='Select at least one chord quality.'; stop_chords(); return; }
+      const kind = bag[Math.floor(Math.random()*bag.length)];
+
+      const { midis, invLabel } = buildChordMidis(rootPC, kind);
+      const nameText = chordKindToSpeech(rootPC, kind);
+
+      const dur = Math.max(0.2, parseFloat(chordDur.value)||1.0);
+      const t = audio.t()+0.02;
+      scheduleChord(midis, t, dur, 1.0);
+      lightChordOnKey(kbd_chords, midis, t, dur);
+      await new Promise(r=>setTimeout(r, dur*900));
+
+      const q=quarterSec(+bpm_chords.value);
+      const revealWait = Math.max(0, +revealBeats.value || 0) * q;
+      if(revealWait>0){ await new Promise(r=>setTimeout(r, revealWait*1000)); }
+
+      // Speak chord name + inversion
+      await speakAsyncText(`${nameText}, ${invLabel}`, {rate:1.0, volume:1.0});
+      await new Promise(r=>setTimeout(r, 80));
+
+      const t2=audio.t()+0.02;
+      scheduleChord(midis, t2, dur, 0.95);
+      lightChordOnKey(kbd_chords, midis, t2, dur);
+      await new Promise(r=>setTimeout(r, (dur+0.1)*1000));
+    }
+  }
+  function stop_chords(){ running_chords=false; startBtn_chords.classList.remove('running'); status_chords.textContent='Stopped.'; releaseWakeLock(); }
+
+  startBtn_chords.addEventListener('click',()=>{ if(!running_chords) start_chords(); });
+  stopBtn_chords.addEventListener('click',stop_chords);
+
+  // ===== Audio unlock =====
   function unlockAudioOnce(){
     if(audioUnlocked) return;
     audio.init();
-    const ctx=audio.ctx; const b=ctx.createBuffer(1,1,22050);
+    const ctx=audio.ctx;
+    const b=ctx.createBuffer(1,1,22050);
     const src=ctx.createBufferSource(); src.buffer=b; src.connect(audio.master);
     try{ src.start(0); }catch(e){}
     ctx.resume().catch(()=>{});
@@ -572,192 +740,6 @@
   }
   ['touchend','mousedown','keydown'].forEach(ev=>window.addEventListener(ev,unlockAudioOnce,{once:true,passive:true}));
 
-  async function start(){
-    audio.init(); if(audio.ctx.state==='suspended'){ try{ await audio.ctx.resume(); }catch(e){} }
-    running=true; startBtn.classList.add('running'); statusEl.textContent='Running…';
-    if(wakeLockEnabled) requestWakeLock(); round=0;
-
-    while(running){
-      round++;
-      const n=Math.max(1,+cadEvery.value);
-      if(((round-1)%n)===0){ await playCadenceC(); }
-
-      await sleepSec(parseFloat(preSil.value));
-      const k=Math.min(4, Math.max(1, parseInt(stackCountEl.value,10)||1));
-      const targets=pickRandomTargets(k);
-      if(!targets.length){ statusEl.textContent='No valid notes in range/selection.'; stop(); return; }
-
-      await playTargets(targets);
-      await sleepSec(parseFloat(revealWait.value));
-      await revealAllSequential(targets);
-      await sleepSec(parseFloat(between.value));
-    }
-  }
-  function stop(){ running=false; startBtn.classList.remove('running'); statusEl.textContent='Stopped.'; releaseWakeLock(); }
-  startBtn.addEventListener('click',()=>{ if(!running) start(); });
-  stopBtn.addEventListener('click',stop);
-  revealModeEl.addEventListener('change',()=>{ if(revealModeEl.value==='speak'){ try{ tts.init(); }catch(_){} } });
-
-  // ===== CHORDS: UI build =====
-  // Roots (12) – default ALL on
-  const rootChecks=[];
-  for(let pc=0;pc<12;pc++){
-    const wrap=document.createElement('label'); wrap.style.display='flex'; wrap.style.gap='6px'; wrap.style.alignItems='center';
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.value=pc; cb.checked=true;
-    rootChecks.push(cb); wrap.appendChild(cb); wrap.appendChild(document.createTextNode(' '+noteNames[pc]));
-    rootRow.appendChild(wrap);
-  }
-
-  // Toggle 7th checkboxes enable/disable
-  function set7thEnabled(){
-    document.querySelectorAll('.qual7').forEach(el=>{ el.disabled = !allow7.checked; });
-  }
-  set7thEnabled();
-  allow7.addEventListener('change', set7thEnabled);
-
-  // ===== CHORDS: building / naming =====
-  const TRIADS={
-    maj:[0,4,7],
-    min:[0,3,7],
-    dim:[0,3,6],
-    aug:[0,4,8],
-  };
-  const SEVENTHS={
-    dom7:[0,4,7,10],
-    maj7:[0,4,7,11],
-    min7:[0,3,7,10],
-    m7b5:[0,3,6,10],
-    dim7:[0,3,6,9],
-  };
-
-  function pickChordDefinition(){
-    // Pool of qualities based on UI
-    const triQual=[...document.querySelectorAll('.qualTri')].filter(x=>x.checked).map(x=>x.value);
-    let qualPool=[...triQual];
-    if(allow7.checked){
-      const q7=[...document.querySelectorAll('.qual7')].filter(x=>x.checked).map(x=>x.value);
-      qualPool=qualPool.concat(q7);
-    }
-    const roots = rootChecks.filter(cb=>cb.checked).map(cb=>+cb.value);
-    if(!roots.length || !qualPool.length) return null;
-    const root = roots[Math.floor(Math.random()*roots.length)];
-    const qual = qualPool[Math.floor(Math.random()*qualPool.length)];
-    return {rootPC:root, qual};
-  }
-
-  function chordIntervals(qual){
-    if (qual in TRIADS) return TRIADS[qual];
-    return SEVENTHS[qual] || TRIADS.maj;
-  }
-
-  function applyInversion(tones, invCount){
-    // Move bottom tone up an octave, invCount times
-    const arr=tones.slice();
-    for(let i=0;i<invCount;i++){
-      const x=arr.shift(); arr.push(x+12);
-    }
-    return arr;
-  }
-
-  function midiForRootPC(pc, low=48, high=60){
-    // Find a MIDI note between low..high whose %12 equals pc
-    for(let m=low;m<=high;m++){ if((m%12)===pc) return m; }
-    // fallback
-    return low + ((pc - (low%12) + 12) % 12);
-  }
-
-  function buildChordMIDIs(rootPC, qual, allowInversions, rangeLow=48, rangeHigh=72){
-    const base = midiForRootPC(rootPC, 48, 60); // keep roots around C3..B3
-    const ints = chordIntervals(qual);
-    let tones = ints.map(i=>base+i);
-    // Close position: lift notes so all within rangeLow..rangeHigh
-    tones = tones.map(n=>{ while(n<rangeLow) n+=12; while(n>rangeHigh) n-=12; return n; }).sort((a,b)=>a-b);
-
-    if(allowInversions && tones.length>2){
-      const maxInv=tones.length-1;
-      const inv = Math.floor(Math.random()*(maxInv+1)); // include root if inv=0
-      tones = applyInversion(tones, inv).map(n=>{ while(n<rangeLow) n+=12; return n; }).sort((a,b)=>a-b);
-      return {midis:tones, inversion:inv};
-    }
-    return {midis:tones, inversion:0};
-  }
-
-  function preferNameForPC(pc, pref='auto'){
-    // pref: 'auto'|'sharps'|'flats'
-    const nat={0:'C',2:'D',4:'E',5:'F',7:'G',9:'A',11:'B'};
-    if (nat[pc]) return nat[pc];
-    if (pref==='sharps') return SHARP_TEXT[pc];
-    if (pref==='flats')  return FLAT_TEXT[pc];
-    // auto: choose sharp for 1,3,6,8,10 by default
-    return SHARP_TEXT[pc] || noteNames[pc];
-  }
-
-  function qualitySpeak(qual){
-    switch(qual){
-      case 'maj': return 'major';
-      case 'min': return 'minor';
-      case 'dim': return 'diminished';
-      case 'aug': return 'augmented';
-      case 'dom7': return 'dominant seven';
-      case 'maj7': return 'major seven';
-      case 'min7': return 'minor seven';
-      case 'm7b5': return 'minor seven flat five';
-      case 'dim7': return 'diminished seven';
-      default: return qual;
-    }
-  }
-
-  function inversionSpeak(inv){
-    return ['root position','first inversion','second inversion','third inversion'][inv] || '';
-  }
-
-  // ===== CHORDS: loop =====
-  async function ch_playOnce(){
-    // Cadence (C) at chord BPM
-    await playCadenceC(+ch_bpm.value||88);
-
-    // Pick chord
-    const def = pickChordDefinition();
-    if(!def){ ch_status.textContent='Select at least one root and one quality.'; return; }
-    const {rootPC, qual} = def;
-    const allowInversions = !!allowInv.checked;
-    const {midis, inversion} = buildChordMIDIs(rootPC, qual, allowInversions, 48, 72);
-
-    // Play chord once
-    const dur = Math.max(0.2, +ch_dur.value||1.2);
-    scheduleChord(midis, audio.t()+0.02, dur, 0.95);
-    await sleepSec(dur+0.05);
-
-    // Speak name
-    const rootName = preferNameForPC(rootPC, namePref.value);
-    const parts = [rootName, qualitySpeak(qual)];
-    if (sayInversion.checked && inversion>0) parts.push(inversionSpeak(inversion));
-    const speakText = parts.join(' ');
-    await speakLabelAsync(speakText);
-
-    // Tiny gap then play once more
-    await sleepSec(0.08);
-    scheduleChord(midis, audio.t()+0.02, dur, 0.95);
-    await sleepSec(dur+0.05);
-  }
-
-  async function ch_start(){
-    audio.init(); if(audio.ctx.state==='suspended'){ try{ await audio.ctx.resume(); }catch(e){} }
-    ch_running=true; ch_startBtn.classList.add('running'); ch_status.textContent='Running…';
-    if(wakeLockEnabled) requestWakeLock(); ch_round=0;
-
-    while(ch_running){
-      ch_round++;
-      await ch_playOnce();
-      await sleepSec(Math.max(0, +ch_between.value||1.0));
-    }
-  }
-  function ch_stop(){ ch_running=false; ch_startBtn.classList.remove('running'); ch_status.textContent='Stopped.'; releaseWakeLock(); }
-  ch_startBtn.addEventListener('click',()=>{ if(!ch_running) ch_start(); });
-  ch_stopBtn.addEventListener('click',ch_stop);
-
-  // ===== Init small UX bits =====
-  revealModeEl.addEventListener('change',()=>{ if(revealModeEl.value==='speak'){ try{ tts.init(); }catch(_){} }});
 })();
 </script>
 </body>
