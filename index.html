@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
-<title>Hands-Free Ear Trainer (Notes • Chords • Drone • Progressions)</title>
+<title>Hands-Free Ear Trainer — Notes • Chords • Drone • Progressions</title>
 <style>
   :root{--bg:#0e0f12;--panel:#171a20;--text:#eaeef5;--muted:#9aa4b2}
   *{box-sizing:border-box}
@@ -99,7 +99,7 @@
             <label><input type="checkbox" class="qual7" value="halfdim7"> ø7 (m7♭5)</label>
             <label><input type="checkbox" class="qual7" value="dim7"> o7 (dim7)</label>
           </div>
-          <div class="hint">Triads/7ths are controlled here — no separate 7ths toggle.</div>
+          <div class="hint">Triads/7ths are controlled here — no separate “sevenths” toggle.</div>
         </fieldset>
 
         <fieldset>
@@ -246,7 +246,7 @@
       </div>
     </div>
 
-    <!-- PROGRESSIONS -->
+    <!-- PROGRESSIONS (no modulation UI) -->
     <div id="progPane" class="pane">
       <div class="row">
         <fieldset>
@@ -270,14 +270,13 @@
               <option value="I-V-vi-IV">I–V–vi–IV (pop)</option>
               <option value="ii-V-I">ii–V–I (jazz)</option>
               <option value="I-IV-V-I">I–IV–V–I</option>
-              <option value="I-vi-IV-V">I–vi–IV–V</option>
+              <option value="I-vi-IV-V">I–vi–IV–V (’50s)</option>
               <option value="I-bVII-IV">I–♭VII–IV (rock)</option>
               <option value="i-bVII-bVI-V|min">i–♭VII–♭VI–V (Andalusian, minor)</option>
               <option value="IV-bVII:dom7-I">IV–♭VII7–I (backdoor)</option>
               <option value="ii-bII:dom7-I">ii–♭II7–I (tritone sub)</option>
               <option value="I-bIII-IV-I">I–♭III–IV–I (mixture)</option>
               <option value="I-bVI-bVII-I">I–♭VI–♭VII–I (lift)</option>
-              <option value="MOD:V|I-ii-V-I">Modulate to V: I — ⇢ key of V — ii–V–I</option>
               <option value="custom" selected>Custom…</option>
             </select>
             <button id="loadPreset">Load</button>
@@ -285,17 +284,23 @@
 
           <div class="row">
             <label>Add degree</label>
-            <select id="degSel" style="width:120px">
-              <option>I</option><option>bII">♭II</option><option>II</option>
-              <option>bIII">♭III</option><option>III</option>
-              <option>IV</option><option>#IV">♯IV</option><option>V</option>
-              <option>bVI">♭VI</option><option>VI</option>
-              <option>bVII">♭VII</option><option>VII</option>
-              <option>ii</option><option>iii</option><option>vi</option><option>vii°">vii°</option>
+            <select id="degSel" style="width:140px">
+              <option>I</option>
+              <option>♭II</option>
+              <option>II</option>
+              <option>♭III</option>
+              <option>III</option>
+              <option>IV</option>
+              <option>♯IV</option>
+              <option>V</option>
+              <option>♭VI</option>
+              <option>VI</option>
+              <option>♭VII</option>
+              <option>VII</option>
             </select>
             <label>Quality</label>
             <select id="qualSel" style="width:150px">
-              <option value="auto" selected>Auto (by key/label)</option>
+              <option value="auto" selected>Auto (key-based)</option>
               <option value="maj">Major</option>
               <option value="min">Minor</option>
               <option value="dim">Diminished</option>
@@ -312,27 +317,13 @@
             <button id="clearSteps">Clear</button>
           </div>
 
-          <div class="row">
-            <fieldset>
-              <legend>Key change (modulation)</legend>
-              <div class="row">
-                <label>New key</label>
-                <select id="modKeyRoot" style="width:120px"></select>
-                <select id="modKeyMode" style="width:120px">
-                  <option value="major" selected>Major</option>
-                  <option value="minor">Minor</option>
-                </select>
-                <button id="addMod">Insert key change</button>
-              </div>
-              <div class="hint">A key-change step is instantaneous and affects all following chords.</div>
-            </fieldset>
-          </div>
-
           <div class="row" style="align-items:flex-start">
             <label>Sequence</label>
             <div id="seqView" class="panel" style="min-width:320px; padding:8px 10px"></div>
           </div>
-          <div class="hint">Tip: sing roots/guide-tones; listen for borrowed/altered color and for the “pull” after modulations.</div>
+          <div class="hint">
+            💡 Use <b>Auto</b> to infer diatonic quality in the chosen key/mode. Altered degrees (♭III, ♭VII, ♯IV…) use sensible defaults; you can override.
+          </div>
         </fieldset>
 
         <fieldset>
@@ -365,7 +356,7 @@
 
 <script>
 (() => {
-  // ===== State =====
+  // ===== Shared state / guards =====
   let running_notes=false, running_chords=false, running_drone=false, running_prog=false;
   let wakeLock=null, wakeLockEnabled=true;
   let droneVoices=[];
@@ -375,7 +366,7 @@
   const noteNames=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
   const sayNames=["C","C sharp","D","D sharp","E","F","F sharp","G","G sharp","A","A sharp","B"];
   const diatonicMaj=[0,2,4,5,7,9,11];
-  const diatonicMin=[0,2,3,5,7,8,10]; // natural minor
+  const diatonicMin=[0,2,3,5,7,8,10];
   const midiToFreq=m=>A4*Math.pow(2,(m-A4_MIDI)/12);
   const midiToName=m=>`${noteNames[m%12]}${Math.floor(m/12)-1}`;
   const pcToName = pc => sayNames[pc];
@@ -396,8 +387,8 @@
   const tts={ready:false,voices:[],init(){ if(this.ready) return; const load=()=>{ this.voices=speechSynthesis.getVoices()||[]; this.ready=true; }; load(); window.speechSynthesis.onvoiceschanged=load;},pick(){ return this.voices.find(v=>/en(-|_|$)/i.test(v.lang))||this.voices[0]||null;}};
   function speakAsync(text,{rate=1.0,volume=1.0}={}){return new Promise(res=>{try{tts.init();const u=new SpeechSynthesisUtterance(text);const v=tts.pick();if(v)u.voice=v;u.rate=Math.max(0.5,Math.min(1.4,rate));u.volume=Math.max(0,Math.min(1,volume));let d=false;const done=()=>{if(!d){d=true;res();}};u.onend=done;u.onerror=done;speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(done,Math.max(600,text.length*60/u.rate)+300);}catch(_){res();}});}
 
-  // ===== Wake Lock =====
-  async function requestWakeLock(){try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{});} }catch(_){}} 
+  // ===== Wake Lock (safe guards) =====
+  async function requestWakeLock(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{});} }catch(_){}} 
   function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ if(wakeLockEnabled)requestWakeLock(); if(audio.ctx&&audio.ctx.state!=='running'){ audio.ctx.resume().catch(()=>{});} } else { releaseWakeLock(); } });
 
@@ -464,6 +455,7 @@
     return {lightPC, lightChord, getElForPC:(pc)=>pcToKeyEl.get(pc)};
   }
 
+  // ===== Synth =====
   function scheduleTone(midi, start, dur, vel=0.95){
     const ctx = audio.ctx; const f = midiToFreq(midi);
     const bus = ctx.createGain();
@@ -746,7 +738,7 @@
   startBtn_notes.addEventListener('click',()=>{ if(!running_notes) start_notes(); });
   stopBtn_notes.addEventListener('click',stop_notes);
 
-  // ===== DRONE (live-edit) =====
+  // ===== DRONE =====
   const pcRow_drone=document.getElementById('pcRow_drone');
   const startBtn_drone=document.getElementById('startBtn_drone');
   const stopBtn_drone=document.getElementById('stopBtn_drone');
@@ -814,7 +806,7 @@
     const t = audio.t()+0.01; scheduleTone(midi, t, dur, 1.0); key.classList.add('lit'); setTimeout(()=>key.classList.remove('lit'), dur*1000);
   }, {passive:true});
 
-  // ===== PROGRESSIONS (chromatic, per-chord beats, voice-leading, modulations) =====
+  // ===== PROGRESSIONS (no modulation; chromatic degree picker) =====
   const progKeyRoot=document.getElementById('progKeyRoot');
   const progMode=document.getElementById('progMode');
   const progPreset=document.getElementById('progPreset');
@@ -829,9 +821,6 @@
   const progBeats=document.getElementById('progBeats');
   const progGap=document.getElementById('progGap');
   const voiceLead=document.getElementById('voiceLead');
-  const modKeyRoot=document.getElementById('modKeyRoot');
-  const modKeyMode=document.getElementById('modKeyMode');
-  const addMod=document.getElementById('addMod');
   const startBtn_prog=document.getElementById('startBtn_prog');
   const stopBtn_prog=document.getElementById('stopBtn_prog');
   const status_prog=document.getElementById('status_prog');
@@ -839,53 +828,36 @@
 
   for(let pc=0;pc<12;pc++){
     const o=document.createElement('option'); o.value=pc; o.textContent=noteNames[pc]; if(pc===0) o.selected=true; progKeyRoot.appendChild(o);
-    const o2=o.cloneNode(true); modKeyRoot.appendChild(o2);
   }
 
-  // Sequence supports steps of two kinds:
-  //  - chord: {degLabel, qual, beats}
-  //  - mod:   {mod:{rootPC, mode}}
   let progSeq=[];
-  function defaultStepBeats(){ return Math.max(0.5, +progBeats.value || 2); }
+  const defaultStepBeats = ()=>Math.max(0.5, +progBeats.value || 2);
 
   function renderSeq(){
     if(!progSeq.length){ seqView.innerHTML='<span class="hint">No steps yet.</span>'; return; }
     seqView.innerHTML='';
     progSeq.forEach((s,i)=>{
       const chip=document.createElement('div'); chip.className='chip'; chip.dataset.idx=i;
-      if(s.mod){
-        chip.innerHTML = `⇢ Key: <strong>${noteNames[s.mod.rootPC]} ${s.mod.mode}</strong> <button class="chip-del">✕</button>`;
-      }else{
-        chip.innerHTML=`<strong>${i+1}.</strong> <span>${s.degLabel}${s.qual!=='auto'?' '+s.qual:''}</span>
-          <label>beats</label><input type="number" class="chip-beats" min="0.5" step="0.5" value="${s.beats}">
-          <button class="chip-del">✕</button>`;
-      }
+      chip.innerHTML=`<strong>${i+1}.</strong> <span>${s.degLabel}${s.qual!=='auto'?' '+s.qual:''}</span>
+        <label>beats</label><input type="number" class="chip-beats" min="0.5" step="0.5" value="${s.beats}">
+        <button class="chip-del">✕</button>`;
       seqView.appendChild(chip);
     });
   }
 
+  function romanDisplayPretty(labelRaw){ return labelRaw.replace(/b/g,'♭').replace(/#/g,'♯'); }
   function loadPresetString(tag){
     const beats = defaultStepBeats();
     progSeq=[];
-    if(tag==='MOD:V|I-ii-V-I'){
-      // I — (mod to V) — ii–V–I
-      progSeq.push({degLabel:'I', qual:'auto', beats});
-      progSeq.push({mod:{rootPC: addSemitones((+progKeyRoot.value|0), 7), mode: progMode.value}});
-      progSeq.push({degLabel:'ii', qual:'auto', beats});
-      progSeq.push({degLabel:'V', qual:'auto', beats});
-      progSeq.push({degLabel:'I', qual:'auto', beats});
+    if(tag.includes('|')){
+      const [seq,modeFlag]=tag.split('|');
+      if(modeFlag==='min') progMode.value='minor';
+      seq.split('-').forEach(d=>progSeq.push({degLabel:romanDisplayPretty(d), qual:'auto', beats}));
     }else{
-      // parse with simple flags for dom7 in label like "bII:dom7"
-      const parts = tag.split('-').map(x=>x.trim());
-      parts.forEach(p=>{
+      tag.split('-').forEach(p=>{
         if(p.includes(':')){
           const [deg,qtag]=p.split(':');
-          const q = qtag==='dom7'?'dom7':(qtag||'auto');
-          progSeq.push({degLabel:romanDisplayPretty(deg), qual:q, beats});
-        }else if(p.includes('|')){ // handle minor preset encoded like "i-bVII-bVI-V|min"
-          const [seq,modeFlag]=p.split('|');
-          if(modeFlag==='min') progMode.value='minor';
-          seq.split('-').forEach(d=>progSeq.push({degLabel:romanDisplayPretty(d), qual:'auto', beats}));
+          progSeq.push({degLabel:romanDisplayPretty(deg), qual:qtag, beats});
         }else{
           progSeq.push({degLabel:romanDisplayPretty(p), qual:'auto', beats});
         }
@@ -902,19 +874,16 @@
 
   addStep.addEventListener('click', ()=>{
     const b = Math.max(0.5, +stepBeats.value || defaultStepBeats());
-    progSeq.push({degLabel:romanDisplayPretty(degSel.value), qual:qualSel.value, beats:b});
+    progSeq.push({degLabel:degSel.value, qual:qualSel.value, beats:b});
     renderSeq();
   });
-  addMod.addEventListener('click', ()=>{
-    progSeq.push({mod:{rootPC:(+modKeyRoot.value|0), mode:modKeyMode.value}});
-    renderSeq();
-  });
+
   clearSteps.addEventListener('click', ()=>{ progSeq=[]; renderSeq(); });
 
   seqView.addEventListener('input', (e)=>{
     const chip=e.target.closest('.chip'); if(!chip) return;
     const idx=+chip.dataset.idx;
-    if(e.target.classList.contains('chip-beats') && progSeq[idx] && !progSeq[idx].mod){
+    if(e.target.classList.contains('chip-beats') && progSeq[idx]){
       const v=Math.max(0.5, +e.target.value || defaultStepBeats());
       progSeq[idx].beats=v;
     }
@@ -927,78 +896,55 @@
     }
   });
 
-  // ---- Degree parsing & defaults ----
   const romanMapSemis = {I:0, II:2, III:4, IV:5, V:7, VI:9, VII:11};
   function parseDegree(labelRaw){
-    // returns {acc:-1|0|+1, roman:'I'..'VII', dim:false, display:string}
     let label = (labelRaw||'I').replace(/\s+/g,'');
-    // normalize ASCII to canonical (keep pretty display for UI)
-    const acc = label.startsWith('b')||label.startsWith('♭') ? -1 : (label.startsWith('#')||label.startsWith('♯') ? +1 : 0);
-    if(acc!==0) label = label.replace(/^([b♭#♯])/, '');
-    const dim = /[°o]$/.test(label);
-    const core = label.replace(/[°o]$/,'');
-    // roman part in uppercase for semitone lookup
-    const roman = core.toUpperCase();
-    return {acc, roman, dim, display:romanDisplayPretty(labelRaw)};
-  }
-  function romanDisplayPretty(labelRaw){
-    // Keep user-friendly glyphs
-    return labelRaw.replace('b','♭').replace('#','♯');
+    let acc = 0;
+    if(/^([b♭])/.test(label)) acc = -1;
+    if(/^([#♯])/.test(label)) acc = +1;
+    label = label.replace(/^([b♭#♯])/, '');
+    const roman = label.toUpperCase();
+    return {acc, roman, display:romanDisplayPretty(labelRaw)};
   }
   function degreeRootPC_byChromatic(keyPC, parsed){
     const semiBase = romanMapSemis[parsed.roman] ?? 0;
     return (keyPC + semiBase + parsed.acc + 12) % 12;
   }
-  function degreeRootPC_diatonic(keyPC, idx, mode){
-    const scale = (mode==='major')?diatonicMaj:diatonicMin;
-    return (keyPC + scale[idx]) % 12;
-  }
-  function isPlainDiatonicDegree(parsed){
-    // true only for no accidental and roman within I..VII exactly
-    return parsed.acc===0 && parsed.roman in romanMapSemis;
-  }
-  function degIndexFromPlainRoman(parsed, mode){
-    const order=["I","II","III","IV","V","VI","VII"];
-    const idx=order.indexOf(parsed.roman);
-    return Math.max(0, Math.min(6, idx));
-  }
+  function isPlainDiatonic(parsed){ return parsed.acc===0 && parsed.roman in romanMapSemis; }
+  function degIndexFromRoman(parsed){ return ['I','II','III','IV','V','VI','VII'].indexOf(parsed.roman); }
+
   function defaultQualityForLabel(label, mode){
     const p=parseDegree(label);
-    if(p.dim) return 'dim';
-    if(isPlainDiatonicDegree(p)){
-      // diatonic defaults
-      const idx=degIndexFromPlainRoman(p, mode);
+    if(isPlainDiatonic(p)){
+      const idx=degIndexFromRoman(p);
       if(mode==='major'){ return ['maj','min','min','maj','maj','min','dim'][idx]; }
       return ['min','dim','maj','min','min','maj','maj'][idx];
     }
-    // altered defaults
-    const altered = p.acc!==0;
-    if(altered){
-      // Common mixture defaults
-      if(p.roman==='II' && p.acc<0) return 'maj';   // ♭II (Neapolitan-ish triad default)
-      if(p.roman==='III' && p.acc<0) return 'maj';  // ♭III
-      if(p.roman==='VI' && p.acc<0) return 'maj';   // ♭VI
-      if(p.roman==='VII' && p.acc<0) return 'maj';  // ♭VII
-      if(p.roman==='IV' && p.acc>0) return 'dim';   // ♯IV°
-    }
+    if(p.roman==='II' && p.acc<0) return 'maj';   // ♭II
+    if(p.roman==='III' && p.acc<0) return 'maj';  // ♭III
+    if(p.roman==='VI' && p.acc<0) return 'maj';   // ♭VI
+    if(p.roman==='VII' && p.acc<0) return 'maj';  // ♭VII
+    if(p.roman==='IV' && p.acc>0) return 'dim';   // ♯IV°
     return 'maj';
   }
-  function romanDisplay(idx, q, mode){
-    const romans = ['I','II','III','IV','V','VI','VII'];
-    let base = romans[idx];
-    const defaultQ = (mode==='major')?['maj','min','min','maj','maj','min','dim'][idx]:['min','dim','maj','min','min','maj','maj'][idx];
-    const quality = q==='auto'?defaultQ:q;
-    if(quality==='min'||quality==='min7') base = base.toLowerCase();
-    if(quality==='dim'||quality==='halfdim7'||quality==='dim7') base = base.toLowerCase()+'°';
-    if(quality==='dom7') base = base + '7';
-    if(quality==='maj7') base = base + 'maj7';
-    if(quality==='min7') base = base + '7';
-    if(quality==='halfdim7') base = base + 'ø7';
-    if(quality==='dim7') base = base + 'o7';
-    return base;
+
+  function buildChordIntervals(q){
+    switch(q){
+      case 'maj': return [0,4,7];
+      case 'min': return [0,3,7];
+      case 'dim': return [0,3,6];
+      case 'aug': return [0,4,8];
+      case 'maj7': return [0,4,7,11];
+      case 'min7': return [0,3,7,10];
+      case 'dom7': return [0,4,7,10];
+      case 'halfdim7': return [0,3,6,10];
+      case 'dim7': return [0,3,6,9];
+      default: return [0,4,7];
+    }
   }
+
   function chordNameFromPC(pc, q){
-    const rootName = pcToName(pc);
+    const rootName = sayNames[pc];
     switch(q){
       case 'maj': return `${rootName} major`;
       case 'min': return `${rootName} minor`;
@@ -1013,26 +959,11 @@
     }
   }
 
-  // ----- Voice-leading helpers -----
   const VOICE_MIN=48, VOICE_MAX=72;
   function wrapToRange(p, minP=VOICE_MIN, maxP=VOICE_MAX){ while(p<minP) p+=12; while(p>maxP) p-=12; return p; }
   function nearestPitchForPc(targetPc, refPitch){
     const base = refPitch - (refPitch%12) + targetPc;
     const cand=[base-12, base, base+12]; cand.sort((a,b)=>Math.abs(a-refPitch)-Math.abs(b-refPitch)); return cand[0];
-  }
-  function buildChordIntervals(q){
-    switch(q){
-      case 'maj': return [0,4,7];
-      case 'min': return [0,3,7];
-      case 'dim': return [0,3,6];
-      case 'aug': return [0,4,8];
-      case 'maj7': return [0,4,7,11];
-      case 'min7': return [0,3,7,10];
-      case 'dom7': return [0,4,7,10];
-      case 'halfdim7': return [0,3,6,10];
-      case 'dim7': return [0,3,6,9];
-      default: return [0,4,7];
-    }
   }
   function buildVoicedClose(prevMidis, rootPc, quality){
     const ints = buildChordIntervals(quality);
@@ -1060,11 +991,11 @@
     const parsed = parseDegree(label);
     const quality = (qual==='auto') ? defaultQualityForLabel(label, currentMode) : qual;
 
-    // choose root pc (diatonic vs chromatic)
     let rootPc;
-    if(isPlainDiatonicDegree(parsed)){
-      const idx=degIndexFromPlainRoman(parsed, currentMode);
-      rootPc = degreeRootPC_diatonic(currentKeyPC, idx, currentMode);
+    if(isPlainDiatonic(parsed)){
+      const idx=degIndexFromRoman(parsed);
+      const scale = currentMode==='major'?diatonicMaj:diatonicMin;
+      rootPc = (currentKeyPC + scale[idx]) % 12;
     }else{
       rootPc = degreeRootPC_byChromatic(currentKeyPC, parsed);
     }
@@ -1077,20 +1008,15 @@
       const base = 48 + rootPc;
       midis = ints.map(semi=> base + semi);
     }
-    // Roman label for overlay: keep user's pretty label + annotate 7ths if needed for display
-    let display = parsed.display;
+
+    let display = label;
     if(qual==='dom7') display += '7';
     if(qual==='maj7') display += 'maj7';
     if(qual==='min7') display += '7';
     if(qual==='halfdim7') display += 'ø7';
     if(qual==='dim7') display += 'o7';
-    return { midis, pc:rootPc, quality, romanDisp:display };
-  }
 
-  // ---- Runner ----
-  function defaultStepsFallback(){
-    const b=defaultStepBeats();
-    return [{degLabel:'I',qual:'auto',beats:b},{degLabel:'V',qual:'auto',beats:b},{degLabel:'vi',qual:'auto',beats:b},{degLabel:'IV',qual:'auto',beats:b}];
+    return { midis, pc:rootPc, quality, romanDisp:display };
   }
 
   async function playProgressionLoop(){
@@ -1098,20 +1024,19 @@
     const q = 60/Math.max(30,bpm);
     const gap = Math.max(0, +progGap.value || 0);
 
-    let keyPC = (+progKeyRoot.value)|0;
-    let mode = progMode.value;
+    const keyPC = (+progKeyRoot.value)|0;
+    const mode = progMode.value;
 
-    const steps = progSeq.length ? progSeq : defaultStepsFallback();
+    const steps = progSeq.length ? progSeq : [
+      {degLabel:'I',qual:'auto',beats:defaultStepBeats()},
+      {degLabel:'V',qual:'auto',beats:defaultStepBeats()},
+      {degLabel:'vi',qual:'auto',beats:defaultStepBeats()},
+      {degLabel:'IV',qual:'auto',beats:defaultStepBeats()}
+    ];
     let prevVoiced=null;
 
     while(running_prog){
       for(const s of steps){
-        if(s.mod){
-          keyPC = s.mod.rootPC; mode = s.mod.mode; prevVoiced=null;
-          showOverlay(`⇢ Key: ${noteNames[keyPC]} ${mode}`, 1.0);
-          await new Promise(r=>setTimeout(r, 300));
-          continue;
-        }
         const beats = Math.max(0.5, +s.beats || defaultStepBeats());
         const dur = beats*q*0.9;
 
@@ -1150,7 +1075,7 @@
     key.classList.add('lit'); setTimeout(()=>key.classList.remove('lit'), dur*1000);
   }, {passive:true});
 
-  // Default landing
+  // Default landing tab
   setActiveTab('chordsPane');
 })();
 </script>
