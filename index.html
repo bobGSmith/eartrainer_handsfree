@@ -336,7 +336,7 @@
           <legend>Timing</legend>
           <div class="row">
             <label>BPM</label><input id="progBpm" type="number" min="30" max="220" value="88" style="width:80px">
-            <label>Default beats per chord</label><input id="progBeats" type="number" min="0.5" step="0.5" value="2" style="width:90px">
+            <label>Default beats per chord</label><input id="progBeats" type="number" min="0.5" step="0.5" value="4" style="width:90px">
             <label>Gap (beats)</label><input id="progGap" type="number" min="0" step="0.5" value="0" style="width:90px">
             <label><input id="voiceLead" type="checkbox" checked> Auto voice-leading</label>
           </div>
@@ -402,8 +402,67 @@
   async function ensureAudio(){ audio.init(); if(audio.ctx.state!=='running'){ try{ await audio.ctx.resume(); }catch(_){}}}
 
   // ===== TTS =====
-  const tts={ready:false,voices:[],init(){ if(this.ready) return; const load=()=>{ this.voices=speechSynthesis.getVoices()||[]; this.ready=true; }; load(); window.speechSynthesis.onvoiceschanged=load;},pick(){ return this.voices.find(v=>/en(-|_|$)/i.test(v.lang))||this.voices[0]||null;}};
-  function speakAsync(text,{rate=1.0,volume=1.0}={}){return new Promise(res=>{try{tts.init();const u=new SpeechSynthesisUtterance(text);const v=tts.pick();if(v)u.voice=v;u.rate=Math.max(0.5,Math.min(1.4,rate));u.volume=Math.max(0,Math.min(1,volume));let d=false;const done=()=>{if(!d){d=true;res();}};u.onend=done;u.onerror=done;speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(done,Math.max(600,text.length*60/u.rate)+300);}catch(_){res();}});}
+  const tts = {
+    ready: false,
+    voices: [],
+    _waiters: [],
+    initOnce() {
+      if (this.ready) return;
+      const load = () => {
+        const v = speechSynthesis.getVoices() || [];
+        if (v.length) {
+          this.voices = v;
+          this.ready = true;
+          this._waiters.forEach(res => res());
+          this._waiters = [];
+        }
+      };
+      load();
+      // Some browsers only populate after this event (sometimes multiple times)
+      window.speechSynthesis.onvoiceschanged = load;
+    },
+    waitReady(timeoutMs = 1500) {
+      this.initOnce();
+      if (this.ready) return Promise.resolve();
+      return new Promise((res) => {
+        this._waiters.push(res);
+        // Fallback: if still not ready by timeout, proceed anyway
+        setTimeout(() => res(), timeoutMs);
+      });
+    },
+    pick() {
+      // Prefer an English voice, else first available
+      return this.voices.find(v => /en(-|_|$)/i.test(v.lang)) || this.voices[0] || null;
+    }
+  };
+
+  async function speakAsync(text, { rate = 1.0, volume = 1.0 } = {}) {
+    try {
+      await tts.waitReady();               // <-- ensures voices list is populated (or times out)
+      const u = new SpeechSynthesisUtterance(text);
+      const v = tts.pick();
+      if (v) u.voice = v;
+      u.rate = Math.max(0.5, Math.min(1.4, rate));
+      u.volume = Math.max(0, Math.min(1, volume));
+
+      // Avoid aggressive cancel() here; Safari can drop utterances.
+      // If you really need it, call speechSynthesis.cancel() just before queueing the *next* clip.
+      return new Promise((res) => {
+        let settled = false;
+        const done = () => { if (!settled) { settled = true; res(); } };
+        u.onend = done;
+        u.onerror = done;
+        speechSynthesis.speak(u);
+
+        // Safety timeout in case onend never fires
+        setTimeout(done, Math.max(800, text.length * 65 / u.rate) + 400);
+      });
+    } catch {
+      // If anything fails, fail quietly so the training flow continues
+      return;
+    }
+  }
+
 
   // ===== Wake Lock =====
   async function requestWakeLock(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{});} }catch(_){}} 
@@ -601,31 +660,39 @@
     const restBeats = Math.max(0, +postCadBeats.value || 0);
     if(restBeats>0){ await new Promise(r=>setTimeout(r, restBeats*q*1000)); }
   }
+  
   async function start_chords(){
     await ensureAudio();
-    running_chords=true; startBtn_chords.classList.add('running'); status_chords.textContent='Running…';
-    if(wakeLockEnabled) requestWakeLock();
-    while(running_chords){
-      await playCadence_chords();
-      const rootPC = pickRootPC();
-      if(rootPC===null){ status_chords.textContent='Select at least one root.'; stop_chords(); return; }
-      const {triads,sevenths}=selectedQualities();
-      const bag=[...triads,...sevenths]; if(!bag.length){ status_chords.textContent='Select at least one chord quality.'; stop_chords(); return; }
-      const kind = bag[Math.floor(Math.random()*bag.length)];
-      const { midis, invIdx } = buildChordMidis(rootPC, kind);
-      const nameText = chordKindToSpeech(rootPC, kind)+', '+inversionLabel(invIdx);
-      const dur = Math.max(0.2, parseFloat(chordDur.value)||1.0);
-      const t = audio.t()+0.02; scheduleChord(midis, t, dur, 1.0); lightChordOnKey(kbd_chords, midis, t, dur);
-      await new Promise(r=>setTimeout(r, dur*900));
-      const q=quarterSec(+bpm_chords.value);
-      const revealWait = Math.max(0, +revealBeats.value || 0) * q;
-      if(revealWait>0){ await new Promise(r=>setTimeout(r, revealWait*1000)); }
-      await speakAsync(nameText,{rate:1.0,volume:1.0});
-      await new Promise(r=>setTimeout(r, 80));
-      const t2=audio.t()+0.02; scheduleChord(midis, t2, dur, 0.95); lightChordOnKey(kbd_chords, midis, t2, dur);
-      await new Promise(r=>setTimeout(r, (dur+0.1)*1000));
-    }
+    tts.initOnce();
+    running_chords = true;
+    startBtn_chords.classList.add('running');
+    status_chords.textContent = 'Running…';
+    if (wakeLockEnabled) requestWakeLock();
+      running_chords=true; startBtn_chords.classList.add('running'); status_chords.textContent='Running…';
+      if(wakeLockEnabled) requestWakeLock();
+      while(running_chords){
+        await playCadence_chords();
+        const rootPC = pickRootPC();
+        if(rootPC===null){ status_chords.textContent='Select at least one root.'; stop_chords(); return; }
+        const {triads,sevenths}=selectedQualities();
+        const bag=[...triads,...sevenths]; if(!bag.length){ status_chords.textContent='Select at least one chord quality.'; stop_chords(); return; }
+        const kind = bag[Math.floor(Math.random()*bag.length)];
+        const { midis, invIdx } = buildChordMidis(rootPC, kind);
+        const nameText = chordKindToSpeech(rootPC, kind)+', '+inversionLabel(invIdx);
+        const dur = Math.max(0.2, parseFloat(chordDur.value)||1.0);
+        const t = audio.t()+0.02; scheduleChord(midis, t, dur, 1.0); lightChordOnKey(kbd_chords, midis, t, dur);
+        await new Promise(r=>setTimeout(r, dur*900));
+        const q=quarterSec(+bpm_chords.value);
+        const revealWait = Math.max(0, +revealBeats.value || 0) * q;
+        if(revealWait>0){ await new Promise(r=>setTimeout(r, revealWait*1000)); }
+        await speakAsync(nameText,{rate:1.0,volume:1.0});
+        await new Promise(r=>setTimeout(r, 80));
+        const t2=audio.t()+0.02; scheduleChord(midis, t2, dur, 0.95); lightChordOnKey(kbd_chords, midis, t2, dur);
+        await new Promise(r=>setTimeout(r, (dur+0.1)*1000));
+      }
   }
+  
+
   function stop_chords(){ running_chords=false; startBtn_chords.classList.remove('running'); status_chords.textContent='Stopped.'; releaseWakeLock(); }
   startBtn_chords.addEventListener('click',()=>{ if(!running_chords) start_chords(); });
   stopBtn_chords.addEventListener('click',stop_chords);
