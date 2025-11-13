@@ -26,6 +26,8 @@
   .tabpanes{border:1px solid #252935;border-radius:12px;padding:0}
   .pane{display:none;padding:12px}
   .pane.active{display:block}
+
+  /* Keyboard */
   .kbd-wrap{display:flex;justify-content:center}
   .keyboard{position:relative;height:178px}
   .white,.black{position:absolute;border:1px solid #333;border-bottom-left-radius:4px;border-bottom-right-radius:4px}
@@ -42,6 +44,8 @@
   .white.lit .note-tag{color:#014}.black.lit .note-tag{color:#e8f7ff}
   .white.lit .solf-tag{color:#013}.black.lit .solf-tag{color:#e8f7ff}
   .white.lit .variant-tag{color:#012}.black.lit .variant-tag{color:#e8f7ff}
+
+  /* Big overlay */
   .syllable-pop{
     position:fixed; left:50%; top:14%; transform:translateX(-50%);
     font-size:48px; font-weight:800; letter-spacing:1px;
@@ -51,9 +55,11 @@
     z-index:9999;
   }
   .syllable-pop.show{opacity:1;}
+
   .chip{display:inline-flex;align-items:center;gap:6px;margin:4px 6px;padding:4px 8px;border:1px solid #2a3040;border-radius:8px}
   .chip input[type=number]{width:56px}
   .chip button{padding:4px 8px}
+
   @media (max-width:520px){
     button, select, input[type=number]{ padding:12px 14px; font-size:16px }
     .panel{ padding:10px }
@@ -246,7 +252,7 @@
       </div>
     </div>
 
-    <!-- PROGRESSIONS (no modulation UI) -->
+    <!-- PROGRESSIONS -->
     <div id="progPane" class="pane">
       <div class="row">
         <fieldset>
@@ -356,7 +362,7 @@
 
 <script>
 (() => {
-  // ===== Shared state / guards =====
+  // ===== Shared state =====
   let running_notes=false, running_chords=false, running_drone=false, running_prog=false;
   let wakeLock=null, wakeLockEnabled=true;
   let droneVoices=[];
@@ -371,10 +377,22 @@
   const midiToName=m=>`${noteNames[m%12]}${Math.floor(m/12)-1}`;
   const pcToName = pc => sayNames[pc];
 
-  // Kodály syllables
-  const DIA={0:"DO",2:"RE",4:"MI",5:"FA",7:"SOL",9:"LA",11:"TI"};
-  const SHP={1:"DI",3:"RI",6:"FI",8:"SI",10:"LI"};
-  const FLT={1:"RA",3:"ME",6:"SE",8:"LE",10:"TE"};
+  // ===== Solfège sets (Do-based with accidentals) =====
+  const DIA_SYL={0:"Do",2:"Re",4:"Mi",5:"Fa",7:"Sol",9:"La",11:"Ti"};
+  const SHARP_SYL={1:"Di",3:"Ri",6:"Fi",8:"Si",10:"Li"};
+  const FLAT_SYL ={1:"Ra",3:"Me",6:"Se",8:"Le",10:"Te"};
+  function solfegeFor(pc, dir){ // dir: 'up' or 'down'
+    if(DIA_SYL[pc]) return DIA_SYL[pc];
+    return dir==='down' ? FLAT_SYL[pc] : SHARP_SYL[pc];
+  }
+  // Spoken (phonetic-ish) to match the above
+  const DIA_TTS={0:"doh",2:"ray",4:"mee",5:"fah",7:"sol",9:"lah",11:"tee"};
+  const SHARP_TTS={1:"dee",3:"ree",6:"fee",8:"see",10:"lee"};
+  const FLAT_TTS ={1:"rah",3:"may",6:"say",8:"lay",10:"tay"};
+  function solfegeTTS(pc, dir){
+    if(DIA_TTS[pc]) return DIA_TTS[pc];
+    return dir==='down' ? FLAT_TTS[pc] : SHARP_TTS[pc];
+  }
 
   // ===== Audio =====
   const audio={ctx:null, master:null,
@@ -387,7 +405,7 @@
   const tts={ready:false,voices:[],init(){ if(this.ready) return; const load=()=>{ this.voices=speechSynthesis.getVoices()||[]; this.ready=true; }; load(); window.speechSynthesis.onvoiceschanged=load;},pick(){ return this.voices.find(v=>/en(-|_|$)/i.test(v.lang))||this.voices[0]||null;}};
   function speakAsync(text,{rate=1.0,volume=1.0}={}){return new Promise(res=>{try{tts.init();const u=new SpeechSynthesisUtterance(text);const v=tts.pick();if(v)u.voice=v;u.rate=Math.max(0.5,Math.min(1.4,rate));u.volume=Math.max(0,Math.min(1,volume));let d=false;const done=()=>{if(!d){d=true;res();}};u.onend=done;u.onerror=done;speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(done,Math.max(600,text.length*60/u.rate)+300);}catch(_){res();}});}
 
-  // ===== Wake Lock (safe guards) =====
+  // ===== Wake Lock =====
   async function requestWakeLock(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{});} }catch(_){}} 
   function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; } }
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ if(wakeLockEnabled)requestWakeLock(); if(audio.ctx&&audio.ctx.state!=='running'){ audio.ctx.resume().catch(()=>{});} } else { releaseWakeLock(); } });
@@ -405,11 +423,11 @@
   }
   tabs.forEach(t=>t.addEventListener('click',()=>setActiveTab(t.dataset.pane)));
 
-  // ===== Keyboard builder =====
+  // ===== Keyboard builder (fixed black-key placement) =====
   function makeKeyboard(kbdEl){
     let WHITE_W, WHITE_H, BLACK_W, BLACK_H;
     const whitePC=[0,2,4,5,7,9,11];
-    const blackAfter={0:1,2:3,5:6,7:8,9:10};
+    const blackAfter={0:1,2:3,5:6,7:8,9:10}; // black PC after given white PC
     const pcToKeyEl=new Map();
 
     function size(){
@@ -423,23 +441,29 @@
     function enhFlat(pc){ const map={1:'D♭',3:'E♭',6:'G♭',8:'A♭',10:'B♭'}; return map[pc]||''; }
     function draw(){
       kbdEl.innerHTML=''; pcToKeyEl.clear();
-      [0,2,4,5,7,9,11].forEach((pc,i)=>{
+
+      // draw whites
+      whitePC.forEach((pc,i)=>{
         const x=i*WHITE_W;
         const w=document.createElement('div'); w.className='white'; w.dataset.pc=pc;
         Object.assign(w.style,{width:WHITE_W+'px',height:WHITE_H+'px',left:x+'px',top:'0px'});
         const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[pc];
-        const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA[pc]||'';
+        const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent=DIA_SYL[pc]||'';
         const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent='';
         w.appendChild(tag); w.appendChild(solf); w.appendChild(varTag);
         kbdEl.appendChild(w); pcToKeyEl.set(pc,w);
       });
-      [0,2,5,7,9].forEach((pc,i)=>{
-        const bpc=blackAfter[pc]; const left=i*WHITE_W + (WHITE_W - BLACK_W/2);
+
+      // draw blacks (use the *white index* for correct x)
+      whitePC.forEach((pc,i)=>{
+        if(!(pc in blackAfter)) return;
+        const bpc=blackAfter[pc];
+        const left=i*WHITE_W + (WHITE_W - BLACK_W/2); // center between the whites
         const b=document.createElement('div'); b.className='black'; b.dataset.pc=bpc;
         Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
         const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enhFlat(bpc);
         const solf=document.createElement('div'); solf.className='solf-tag'; solf.textContent='';
-        const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent=`${SHP[bpc]||''} / ${FLT[bpc]||''}`;
+        const varTag=document.createElement('div'); varTag.className='variant-tag'; varTag.textContent=`${SHARP_SYL[bpc]||''} / ${FLAT_SYL[bpc]||''}`;
         b.appendChild(tag); b.appendChild(solf); b.appendChild(varTag);
         kbdEl.appendChild(b); pcToKeyEl.set(bpc,b);
       });
@@ -657,8 +681,8 @@
   function buildSpokenLabel_notes(midi, dir, {includeOctave=true, mode='note'}={}){
     const pc=midi%12; const oct=Math.floor(midi/12)-1;
     if(mode==='solfege'){
-      const map={0:"doh",2:"ray",4:"mee",5:"fah",7:"sohl",9:"lah",11:"tee",1:"dee",3:"ree",6:"fee",8:"see",10:"lee"};
-      const syl=map[pc]||''; return includeOctave?`${syl} ${oct}`:syl;
+      const syl=solfegeTTS(pc,dir);
+      return includeOctave?`${syl} ${oct}`:syl;
     }else{
       const base=sayNames[pc]; return includeOctave?`${base} ${oct}`:base;
     }
@@ -691,7 +715,7 @@
     for(const m of seq){
       const t=audio.t()+0.02; scheduleTone(m,t,dur,0.95);
       kbd_notes.lightPC(m%12,t,dur);
-      showOverlay((DIA[m%12]||SHP[m%12]||FLT[m%12]||''), dur);
+      showOverlay(solfegeFor(m%12,dir), dur);
       await new Promise(r=>setTimeout(r, step*1000));
     }
   }
@@ -806,7 +830,7 @@
     const t = audio.t()+0.01; scheduleTone(midi, t, dur, 1.0); key.classList.add('lit'); setTimeout(()=>key.classList.remove('lit'), dur*1000);
   }, {passive:true});
 
-  // ===== PROGRESSIONS (no modulation; chromatic degree picker) =====
+  // ===== PROGRESSIONS =====
   const progKeyRoot=document.getElementById('progKeyRoot');
   const progMode=document.getElementById('progMode');
   const progPreset=document.getElementById('progPreset');
