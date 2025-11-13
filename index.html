@@ -366,6 +366,7 @@
   let running_notes=false, running_chords=false, running_drone=false, running_prog=false;
   let wakeLock=null, wakeLockEnabled=true;
   let droneVoices=[];
+  let ttsPrimed=false; // <-- iOS: prime once after a user gesture
 
   // ===== Music helpers =====
   const A4=440, A4_MIDI=69;
@@ -381,18 +382,11 @@
   const DIA_SYL={0:"Do",2:"Re",4:"Mi",5:"Fa",7:"Sol",9:"La",11:"Ti"};
   const SHARP_SYL={1:"Di",3:"Ri",6:"Fi",8:"Si",10:"Li"};
   const FLAT_SYL ={1:"Ra",3:"Me",6:"Se",8:"Le",10:"Te"};
-  function solfegeFor(pc, dir){ // dir: 'up' or 'down'
-    if(DIA_SYL[pc]) return DIA_SYL[pc];
-    return dir==='down' ? FLAT_SYL[pc] : SHARP_SYL[pc];
-  }
-  // Spoken (phonetic-ish) to match the above
+  function solfegeFor(pc, dir){ if(DIA_SYL[pc]) return DIA_SYL[pc]; return dir==='down' ? FLAT_SYL[pc] : SHARP_SYL[pc]; }
   const DIA_TTS={0:"doh",2:"ray",4:"mee",5:"fah",7:"sol",9:"lah",11:"tee"};
   const SHARP_TTS={1:"dee",3:"ree",6:"fee",8:"see",10:"lee"};
   const FLAT_TTS ={1:"rah",3:"may",6:"say",8:"lay",10:"tay"};
-  function solfegeTTS(pc, dir){
-    if(DIA_TTS[pc]) return DIA_TTS[pc];
-    return dir==='down' ? FLAT_TTS[pc] : SHARP_TTS[pc];
-  }
+  function solfegeTTS(pc, dir){ if(DIA_TTS[pc]) return DIA_TTS[pc]; return dir==='down' ? FLAT_TTS[pc] : SHARP_TTS[pc]; }
 
   // ===== Audio =====
   const audio={ctx:null, master:null,
@@ -401,7 +395,7 @@
   };
   async function ensureAudio(){ audio.init(); if(audio.ctx.state!=='running'){ try{ await audio.ctx.resume(); }catch(_){}}}
 
-  // ===== TTS =====
+  // ===== TTS (hardened for iOS Safari) =====
   const tts = {
     ready: false,
     voices: [],
@@ -418,51 +412,66 @@
         }
       };
       load();
-      // Some browsers only populate after this event (sometimes multiple times)
+      // Some iOS builds fire this late (and multiple times)
       window.speechSynthesis.onvoiceschanged = load;
     },
-    waitReady(timeoutMs = 1500) {
+    waitReady(timeoutMs = 2000) {
       this.initOnce();
       if (this.ready) return Promise.resolve();
       return new Promise((res) => {
         this._waiters.push(res);
-        // Fallback: if still not ready by timeout, proceed anyway
-        setTimeout(() => res(), timeoutMs);
+        setTimeout(res, timeoutMs); // proceed even if no voices reported
       });
     },
     pick() {
-      // Prefer an English voice, else first available
       return this.voices.find(v => /en(-|_|$)/i.test(v.lang)) || this.voices[0] || null;
     }
   };
 
+  const isIOSWebKit = () => /iP(hone|ad|od)/.test(navigator.userAgent) && !!window.webkit;
+
   async function speakAsync(text, { rate = 1.0, volume = 1.0 } = {}) {
     try {
-      await tts.waitReady();               // <-- ensures voices list is populated (or times out)
+      await tts.waitReady(); // voices or timeout
       const u = new SpeechSynthesisUtterance(text);
       const v = tts.pick();
       if (v) u.voice = v;
       u.rate = Math.max(0.5, Math.min(1.4, rate));
       u.volume = Math.max(0, Math.min(1, volume));
 
-      // Avoid aggressive cancel() here; Safari can drop utterances.
-      // If you really need it, call speechSynthesis.cancel() just before queueing the *next* clip.
       return new Promise((res) => {
         let settled = false;
         const done = () => { if (!settled) { settled = true; res(); } };
         u.onend = done;
         u.onerror = done;
+        // NOTE: avoid frequent cancel(); queue is usually fine on iOS if we don't spam cancel
         speechSynthesis.speak(u);
-
-        // Safety timeout in case onend never fires
-        setTimeout(done, Math.max(800, text.length * 65 / u.rate) + 400);
+        // Safety: some iOS versions drop onend; time out gracefully
+        setTimeout(done, Math.max(900, text.length * 70 / u.rate) + 500);
       });
     } catch {
-      // If anything fails, fail quietly so the training flow continues
       return;
     }
   }
 
+  // Prime TTS with a tiny, near-silent utterance after a user gesture.
+  // This fixes first-utterance drop on some iOS versions.
+  async function primeTTSOnce() {
+    if (ttsPrimed) return;
+    ttsPrimed = true;
+    try {
+      await tts.waitReady();
+      // super short, almost inaudible; better than empty string (which can be dropped)
+      const u = new SpeechSynthesisUtterance("ready");
+      const v = tts.pick();
+      if (v) u.voice = v;
+      u.rate = 1.2;
+      u.volume = isIOSWebKit() ? 0.001 : 0.01; // as low as possible; iOS may still output a faint blip
+      u.onend = ()=>{};
+      u.onerror = ()=>{};
+      speechSynthesis.speak(u);
+    } catch {}
+  }
 
   // ===== Wake Lock =====
   async function requestWakeLock(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{});} }catch(_){}} 
@@ -517,7 +526,7 @@
       whitePC.forEach((pc,i)=>{
         if(!(pc in blackAfter)) return;
         const bpc=blackAfter[pc];
-        const left=i*WHITE_W + (WHITE_W - BLACK_W/2); // center between the whites
+        const left=i*WHITE_W + (WHITE_W - BLACK_W/2);
         const b=document.createElement('div'); b.className='black'; b.dataset.pc=bpc;
         Object.assign(b.style,{width:BLACK_W+'px',height:BLACK_H+'px',left:left+'px',top:'0px'});
         const tag=document.createElement('div'); tag.className='note-tag'; tag.textContent=noteNames[bpc].replace('♯','#')+' / '+enhFlat(bpc);
@@ -660,39 +669,34 @@
     const restBeats = Math.max(0, +postCadBeats.value || 0);
     if(restBeats>0){ await new Promise(r=>setTimeout(r, restBeats*q*1000)); }
   }
-  
+
   async function start_chords(){
     await ensureAudio();
     tts.initOnce();
-    running_chords = true;
-    startBtn_chords.classList.add('running');
-    status_chords.textContent = 'Running…';
-    if (wakeLockEnabled) requestWakeLock();
-      running_chords=true; startBtn_chords.classList.add('running'); status_chords.textContent='Running…';
-      if(wakeLockEnabled) requestWakeLock();
-      while(running_chords){
-        await playCadence_chords();
-        const rootPC = pickRootPC();
-        if(rootPC===null){ status_chords.textContent='Select at least one root.'; stop_chords(); return; }
-        const {triads,sevenths}=selectedQualities();
-        const bag=[...triads,...sevenths]; if(!bag.length){ status_chords.textContent='Select at least one chord quality.'; stop_chords(); return; }
-        const kind = bag[Math.floor(Math.random()*bag.length)];
-        const { midis, invIdx } = buildChordMidis(rootPC, kind);
-        const nameText = chordKindToSpeech(rootPC, kind)+', '+inversionLabel(invIdx);
-        const dur = Math.max(0.2, parseFloat(chordDur.value)||1.0);
-        const t = audio.t()+0.02; scheduleChord(midis, t, dur, 1.0); lightChordOnKey(kbd_chords, midis, t, dur);
-        await new Promise(r=>setTimeout(r, dur*900));
-        const q=quarterSec(+bpm_chords.value);
-        const revealWait = Math.max(0, +revealBeats.value || 0) * q;
-        if(revealWait>0){ await new Promise(r=>setTimeout(r, revealWait*1000)); }
-        await speakAsync(nameText,{rate:1.0,volume:1.0});
-        await new Promise(r=>setTimeout(r, 80));
-        const t2=audio.t()+0.02; scheduleChord(midis, t2, dur, 0.95); lightChordOnKey(kbd_chords, midis, t2, dur);
-        await new Promise(r=>setTimeout(r, (dur+0.1)*1000));
-      }
+    await primeTTSOnce(); // <-- iOS: prime after this tap
+    running_chords=true; startBtn_chords.classList.add('running'); status_chords.textContent='Running…';
+    if(wakeLockEnabled) requestWakeLock();
+    while(running_chords){
+      await playCadence_chords();
+      const rootPC = pickRootPC();
+      if(rootPC===null){ status_chords.textContent='Select at least one root.'; stop_chords(); return; }
+      const {triads,sevenths}=selectedQualities();
+      const bag=[...triads,...sevenths]; if(!bag.length){ status_chords.textContent='Select at least one chord quality.'; stop_chords(); return; }
+      const kind = bag[Math.floor(Math.random()*bag.length)];
+      const { midis, invIdx } = buildChordMidis(rootPC, kind);
+      const nameText = chordKindToSpeech(rootPC, kind)+', '+inversionLabel(invIdx);
+      const dur = Math.max(0.2, parseFloat(chordDur.value)||1.0);
+      const t = audio.t()+0.02; scheduleChord(midis, t, dur, 1.0); lightChordOnKey(kbd_chords, midis, t, dur);
+      await new Promise(r=>setTimeout(r, dur*900));
+      const q=quarterSec(+bpm_chords.value);
+      const revealWait = Math.max(0, +revealBeats.value || 0) * q;
+      if(revealWait>0){ await new Promise(r=>setTimeout(r, revealWait*1000)); }
+      await speakAsync(nameText,{rate:1.0,volume:1.0});
+      await new Promise(r=>setTimeout(r, 80));
+      const t2=audio.t()+0.02; scheduleChord(midis, t2, dur, 0.95); lightChordOnKey(kbd_chords, midis, t2, dur);
+      await new Promise(r=>setTimeout(r, (dur+0.1)*1000));
+    }
   }
-  
-
   function stop_chords(){ running_chords=false; startBtn_chords.classList.remove('running'); status_chords.textContent='Stopped.'; releaseWakeLock(); }
   startBtn_chords.addEventListener('click',()=>{ if(!running_chords) start_chords(); });
   stopBtn_chords.addEventListener('click',stop_chords);
@@ -806,6 +810,8 @@
   }
   async function start_notes(){
     await ensureAudio();
+    tts.initOnce();
+    await primeTTSOnce(); // <-- iOS: prime after this tap
     running_notes=true; startBtn_notes.classList.add('running'); status_notes.textContent='Running…';
     if(wakeLockEnabled) requestWakeLock();
     let round=0;
